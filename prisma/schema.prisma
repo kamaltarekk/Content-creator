@@ -1,0 +1,732 @@
+// Commercial Attention OS — Module 1 data model.
+// Source Library (everything uploaded) and Client Brain (only reviewed and
+// approved strategic knowledge) are deliberately separate object graphs,
+// joined only through traceability rows (ClientBrainItemSource) and the
+// review pipeline (ExtractedItem -> ImportReview -> ClientBrainItem).
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =========================================================================
+// ENUMS
+// =========================================================================
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  STRATEGIST
+  EDITOR
+  VIEWER
+  CLIENT_APPROVER
+}
+
+enum ClientRole {
+  OWNER
+  ADMIN
+  STRATEGIST
+  EDITOR
+  VIEWER
+  CLIENT_APPROVER
+}
+
+enum BrandType {
+  PERSONAL_BRAND
+  COMPANY_BRAND
+  HYBRID
+}
+
+enum ClientStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ConfidentialityLevel {
+  INTERNAL
+  CLIENT_CONFIDENTIAL
+  RESTRICTED
+}
+
+enum SourceCategory {
+  STRATEGIC_FRAMEWORK
+  MARKET_RESEARCH
+  CUSTOMER_FEEDBACK
+  SALES_DATA
+  BRAND_GUIDELINES
+  PERFORMANCE_REPORT
+  MEETING_NOTES
+  COMPETITOR_INTEL
+  OTHER
+}
+
+enum SourceFileType {
+  CSV
+  XLSX
+  PDF
+  DOCX
+  TXT
+  MARKDOWN
+  IMAGE
+  AUDIO
+  VIDEO
+}
+
+enum SourceProcessingStatus {
+  UPLOADED
+  QUEUED
+  PROCESSING
+  NEEDS_ATTENTION
+  READY_FOR_REVIEW
+  COMPLETED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum JobType {
+  PROCESS_SOURCE
+}
+
+enum BlockType {
+  HEADING
+  PARAGRAPH
+  TABLE_ROW
+  LIST_ITEM
+  NOTE
+  LINK
+  QUOTE
+  MESSAGE
+}
+
+enum InformationType {
+  STRATEGIC_FACT
+  CLIENT_PREFERENCE
+  AUDIENCE_SIGNAL
+  EVIDENCE
+  HYPOTHESIS
+  EXAMPLE
+  PERFORMANCE_LEARNING
+  RAW_NOTE
+  EXTERNAL_SOURCE
+  CONFLICT
+  MISSING_INFORMATION
+}
+
+enum ExtractedItemValidationStatus {
+  PENDING
+  VALID
+  INVALID
+}
+
+enum ImportReviewStatus {
+  PENDING
+  RESOLVED
+}
+
+enum ImportReviewAction {
+  APPROVE
+  APPROVE_WITH_EDIT
+  REJECT
+  REMAP
+  KEEP_AS_RAW
+  MARK_HYPOTHESIS
+  MARK_AUDIENCE_SIGNAL
+  MARK_EVIDENCE
+  RESOLVE_CONFLICT
+}
+
+enum ClientBrainSectionKey {
+  BUSINESS
+  POSITIONING
+  MARKETS
+  COHORTS
+  BELIEFS
+  VOICE
+  OFFERS
+  PROOF
+  BRAND_ASSOCIATIONS
+  PRODUCTION
+  COMMERCIAL_OBJECTIVES
+  CONSTRAINTS
+  PROHIBITED_CLAIMS
+  LEARNINGS
+}
+
+enum ClientBrainFieldKey {
+  // BUSINESS
+  BUSINESS_MODEL
+  PRODUCTS_SERVICES
+  REVENUE_MODEL
+  BUYER
+  PAYER
+  SALES_PROCESS
+  // POSITIONING
+  CATEGORY
+  CORE_PROMISE
+  DIFFERENTIATION
+  POINT_OF_VIEW
+  BELIEFS_CHALLENGED
+  BELIEFS_REINFORCED
+  EXPERTISE_BOUNDARIES
+  NON_TARGET_WORK
+  // MARKETS
+  MARKET_NAME
+  GEOGRAPHY
+  MARKET_PROBLEM
+  DEMAND
+  MARKET_PURCHASING_POWER
+  GROWTH
+  COMPETITION
+  // COHORTS
+  COHORT_NAME
+  ROLE
+  COMMERCIAL_SITUATION
+  TRIGGER
+  ACTIVE_PROBLEM
+  CURRENT_BELIEF
+  DESIRED_OUTCOME
+  BUYING_ROLE
+  COHORT_PURCHASING_POWER
+  PLATFORM_PRESENCE
+  // BELIEFS
+  WRONG_BELIEF
+  BELIEF_EVIDENCE
+  BETTER_BELIEF
+  COMMERCIAL_CONSEQUENCE
+  BETTER_DECISION
+  RELEVANT_OFFER
+  // VOICE
+  LANGUAGE
+  DIALECT
+  TONE
+  VOCABULARY
+  SENTENCE_STYLE
+  HUMOR
+  PROHIBITED_PHRASES
+  TERMINOLOGY
+  // OFFERS
+  OFFER_NAME
+  TARGET_COHORT
+  PROMISE
+  OUTCOME
+  DELIVERY
+  PRICE
+  OFFER_PROOF
+  GUARANTEE
+  FAST_WIN
+  CTA_ROUTE
+  // PROOF
+  CASE_STUDY
+  TESTIMONIAL
+  RESULT
+  ARTIFACT
+  CREDENTIAL
+  DEMONSTRATION
+  // BRAND_ASSOCIATIONS
+  DESIRED_ASSOCIATION
+  CURRENT_ASSOCIATION
+  NEGATIVE_ASSOCIATION
+  DISTINCTIVE_ASSET
+  // PRODUCTION
+  FORMATS
+  TEAM
+  LOCATIONS
+  EQUIPMENT
+  EDITING_CAPACITY
+  POSTING_CAPACITY
+  PRODUCTION_CONSTRAINTS
+  // COMMERCIAL_OBJECTIVES
+  NORTH_STAR
+  LEADING_INDICATOR
+  LAGGING_INDICATOR
+  GUARDRAIL_METRIC
+  // CONSTRAINTS
+  LEGAL
+  COMPLIANCE
+  OPERATIONAL
+  BRAND
+  ETHICAL
+  // PROHIBITED_CLAIMS
+  CLAIM
+  REASON
+  APPLICABLE_CONTEXT
+  // LEARNINGS
+  LEARNING
+  LEARNING_CONTEXT
+  EVIDENCE_LEVEL
+  APPLICABLE_SCOPE
+  LEARNING_CONFIDENCE
+}
+
+enum ClientBrainItemStatus {
+  ACTIVE
+  ARCHIVED
+  DISPUTED
+  DRAFT
+}
+
+enum ChangeType {
+  ADDED
+  UPDATED
+  REMOVED
+  UNCHANGED
+  CONFLICTING
+}
+
+enum ConflictStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
+enum ConflictResolutionType {
+  KEEP_EXISTING
+  REPLACE
+  MERGE
+  STORE_BOTH
+  MARK_UNRESOLVED
+}
+
+enum MissingDataGapType {
+  MISSING
+  PARTIAL
+  CONFLICTING
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  APPROVE
+  REJECT
+  MAP
+  ARCHIVE
+  SOFT_DELETE
+  CONFLICT_RESOLVE
+  LOGIN
+  LOGOUT
+}
+
+// =========================================================================
+// CORE / AUTH
+// =========================================================================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orgMemberships    OrganizationMember[]
+  clientMemberships ClientMember[]
+  auditLogs         AuditLog[]
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   OrganizationMember[]
+  clients   Client[]
+  auditLogs AuditLog[]
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrgRole
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+// =========================================================================
+// CLIENT
+// =========================================================================
+
+model Client {
+  id               String       @id @default(cuid())
+  organizationId   String
+  name             String
+  displayName      String
+  brandType        BrandType
+  primaryMarket    String?
+  defaultLanguage  String       @default("en")
+  timeZone         String       @default("UTC")
+  shortDescription String?
+  status           ClientStatus @default(ACTIVE)
+  archivedAt       DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  organization     Organization         @relation(fields: [organizationId], references: [id])
+  members          ClientMember[]
+  sources          Source[]
+  brainItems       ClientBrainItem[]
+  brainSections    ClientBrainSection[]
+  conflicts        Conflict[]
+  missingDataItems MissingDataItem[]
+  tags             Tag[]
+  auditLogs        AuditLog[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, status])
+}
+
+model ClientMember {
+  id         String     @id @default(cuid())
+  clientId   String
+  userId     String
+  role       ClientRole
+  assignedAt DateTime   @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([clientId, userId])
+  @@index([userId])
+}
+
+// =========================================================================
+// SOURCE LIBRARY
+// =========================================================================
+
+model Source {
+  id                     String                 @id @default(cuid())
+  clientId               String
+  fileName               String
+  originalFileName       String
+  fileType               SourceFileType
+  mimeType               String
+  sizeBytes              Int
+  checksumSha256         String
+  storageKey             String
+  sourceCategory         SourceCategory
+  title                  String?
+  description            String?
+  confidentiality        ConfidentialityLevel   @default(INTERNAL)
+  processingStatus       SourceProcessingStatus @default(UPLOADED)
+  processingInstructions String?
+  currentVersionNumber   Int                    @default(1)
+  requiresMultimodal     Boolean                @default(false)
+  uploadedById           String
+  isDeleted              Boolean                @default(false)
+  deletedAt              DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  client         Client                @relation(fields: [clientId], references: [id])
+  versions       SourceVersion[]
+  blocks         SourceBlock[]
+  extractedItems ExtractedItem[]
+  jobs           SourceProcessingJob[]
+  tags           Tag[]
+
+  @@index([clientId, processingStatus])
+  @@index([clientId, checksumSha256])
+  @@index([clientId, isDeleted])
+}
+
+model SourceVersion {
+  id             String   @id @default(cuid())
+  sourceId       String
+  versionNumber  Int
+  storageKey     String
+  checksumSha256 String
+  sizeBytes      Int
+  uploadedById   String
+  changeNote     String?
+  createdAt      DateTime @default(now())
+
+  source Source        @relation(fields: [sourceId], references: [id])
+  blocks SourceBlock[]
+
+  @@unique([sourceId, versionNumber])
+}
+
+model SourceProcessingJob {
+  id              String    @id @default(cuid())
+  sourceId        String
+  sourceVersionId String?
+  jobType         JobType   @default(PROCESS_SOURCE)
+  status          JobStatus @default(PENDING)
+  attempts        Int       @default(0)
+  maxAttempts     Int       @default(3)
+  scheduledAt     DateTime  @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  errorMessage    String?
+  resultSummary   Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  source Source @relation(fields: [sourceId], references: [id])
+
+  @@index([status, scheduledAt])
+  @@index([sourceId])
+}
+
+model SourceBlock {
+  id               String    @id @default(cuid())
+  sourceId         String
+  sourceVersionId  String
+  blockType        BlockType
+  sequenceIndex    Int
+  rawText          String
+  locationLabel    String
+  locationJson     Json
+  detectedLanguage String?
+  createdAt        DateTime  @default(now())
+
+  source         Source          @relation(fields: [sourceId], references: [id])
+  sourceVersion  SourceVersion   @relation(fields: [sourceVersionId], references: [id])
+  extractedItems ExtractedItem[]
+
+  @@index([sourceId, sequenceIndex])
+}
+
+// =========================================================================
+// AI EXTRACTION / REVIEW
+// =========================================================================
+
+model ExtractedItem {
+  id                  String                        @id @default(cuid())
+  sourceBlockId       String
+  sourceId            String
+  informationType     InformationType
+  proposedSectionKey  ClientBrainSectionKey?
+  proposedFieldKey    ClientBrainFieldKey?
+  proposedGroupHint   String?
+  normalizedValueText String?
+  normalizedValueJson Json?
+  confidence          Float
+  detectedLanguage    String?
+  reasoningSummary    String?
+  suggestedTags       String[]
+  isConflictCandidate Boolean                       @default(false)
+  aiModel             String?
+  validationStatus    ExtractedItemValidationStatus @default(PENDING)
+  validationNotes     String?
+  duplicateOfItemId   String?
+  clientBrainItemId   String?
+  createdAt           DateTime                      @default(now())
+
+  sourceBlock SourceBlock   @relation(fields: [sourceBlockId], references: [id])
+  source      Source        @relation(fields: [sourceId], references: [id])
+  review      ImportReview?
+  conflicts   Conflict[]
+  tags        Tag[]
+
+  @@index([sourceId])
+  @@index([sourceId, informationType])
+  @@index([proposedSectionKey, proposedFieldKey])
+}
+
+model ImportReview {
+  id               String                 @id @default(cuid())
+  extractedItemId  String                 @unique
+  clientId         String
+  status           ImportReviewStatus     @default(PENDING)
+  resolutionAction ImportReviewAction?
+  editedValueText  String?
+  editedValueJson  Json?
+  editedSectionKey ClientBrainSectionKey?
+  editedFieldKey   ClientBrainFieldKey?
+  reviewerId       String?
+  reviewedAt       DateTime?
+  reviewNotes      String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  extractedItem ExtractedItem @relation(fields: [extractedItemId], references: [id])
+
+  @@index([clientId, status])
+}
+
+// =========================================================================
+// CLIENT BRAIN
+// =========================================================================
+
+model ClientBrainSection {
+  id                        String                @id @default(cuid())
+  clientId                  String
+  sectionKey                ClientBrainSectionKey
+  notes                     String?
+  cachedCompletenessPercent Int?
+  updatedAt                 DateTime              @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@unique([clientId, sectionKey])
+}
+
+model ClientBrainItem {
+  id                   String                @id @default(cuid())
+  clientId             String
+  sectionKey           ClientBrainSectionKey
+  fieldKey             ClientBrainFieldKey
+  groupId              String                @default(cuid())
+  subjectLabel         String?
+  valueText            String?
+  valueJson            Json?
+  status               ClientBrainItemStatus @default(DRAFT)
+  confidence           Float?
+  currentVersionNumber Int                   @default(1)
+  createdById          String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  client              Client                   @relation(fields: [clientId], references: [id])
+  versions            ClientBrainItemVersion[]
+  sourceLinks         ClientBrainItemSource[]
+  conflictsAsExisting Conflict[]
+
+  @@index([clientId, sectionKey])
+  @@index([clientId, sectionKey, fieldKey])
+  @@index([clientId, groupId])
+}
+
+model ClientBrainItemVersion {
+  id                String                @id @default(cuid())
+  clientBrainItemId String
+  versionNumber     Int
+  valueText         String?
+  valueJson         Json?
+  status            ClientBrainItemStatus
+  confidence        Float?
+  changeType        ChangeType
+  changedById       String
+  changeNote        String?
+  createdAt         DateTime              @default(now())
+
+  item ClientBrainItem @relation(fields: [clientBrainItemId], references: [id])
+
+  @@unique([clientBrainItemId, versionNumber])
+}
+
+model ClientBrainItemSource {
+  id                String   @id @default(cuid())
+  clientBrainItemId String
+  sourceId          String
+  sourceBlockId     String?
+  extractedItemId   String?
+  approvedById      String
+  approvedAt        DateTime @default(now())
+  note              String?
+
+  item ClientBrainItem @relation(fields: [clientBrainItemId], references: [id])
+
+  @@index([clientBrainItemId])
+  @@index([sourceId])
+}
+
+// =========================================================================
+// CONFLICTS
+// =========================================================================
+
+model Conflict {
+  id                String         @id @default(cuid())
+  clientId          String
+  clientBrainItemId String
+  extractedItemId   String
+  status            ConflictStatus @default(OPEN)
+  detectedReason    String
+  similarityScore   Float?
+  createdAt         DateTime       @default(now())
+  resolvedAt        DateTime?
+
+  client          Client               @relation(fields: [clientId], references: [id])
+  clientBrainItem ClientBrainItem      @relation(fields: [clientBrainItemId], references: [id])
+  extractedItem   ExtractedItem        @relation(fields: [extractedItemId], references: [id])
+  resolutions     ConflictResolution[]
+
+  @@index([clientId, status])
+}
+
+model ConflictResolution {
+  id                String                 @id @default(cuid())
+  conflictId        String
+  resolutionType    ConflictResolutionType
+  resolvedValueText String?
+  resolvedValueJson Json?
+  resolvedById      String
+  resolvedAt        DateTime               @default(now())
+  note              String?
+
+  conflict Conflict @relation(fields: [conflictId], references: [id])
+
+  @@index([conflictId])
+}
+
+// =========================================================================
+// MISSING DATA / TAGS / AUDIT
+// =========================================================================
+
+model MissingDataItem {
+  id                String                @id @default(cuid())
+  clientId          String
+  sectionKey        ClientBrainSectionKey
+  fieldKey          ClientBrainFieldKey?
+  gapType           MissingDataGapType
+  suggestedQuestion String?
+  priority          Int?
+  generatedAt       DateTime              @default(now())
+  resolvedAt        DateTime?
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([clientId, sectionKey])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  clientId  String
+  label     String
+  createdAt DateTime @default(now())
+
+  client         Client          @relation(fields: [clientId], references: [id])
+  sources        Source[]
+  extractedItems ExtractedItem[]
+
+  @@unique([clientId, label])
+}
+
+model AuditLog {
+  id             String      @id @default(cuid())
+  organizationId String
+  clientId       String?
+  actorUserId    String?
+  action         AuditAction
+  entityType     String
+  entityId       String
+  metadata       Json?
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  client       Client?      @relation(fields: [clientId], references: [id])
+  actor        User?        @relation(fields: [actorUserId], references: [id])
+
+  @@index([clientId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+}

@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: attention_os
+    ports:
+      - "5432:5432"
+    volumes:
+      - attention_os_pgdata:/var/lib/postgresql/data
+
+volumes:
+  attention_os_pgdata:
