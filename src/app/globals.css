@@ -1,0 +1,134 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/*
+  Commercial Attention OS design tokens.
+  Fixed dark "strategy room" theme (spec section 4) — not a light/dark
+  toggle. The charcoal background is deliberate to the product's identity
+  as a premium commercial strategy workspace, not a chat app.
+*/
+:root {
+  --radius: 0.375rem;
+
+  /* Raw brand tokens */
+  --brand-background: #111311;
+  --brand-surface: #1a1d1a;
+  --brand-elevated: #222622;
+  --brand-text-primary: #f5f3ea;
+  --brand-text-secondary: #a8aea5;
+  --brand-lime: #c7ff3d;
+  --brand-warning: #ff5d5d;
+  --brand-border: #343934;
+
+  /* Semantic shadcn/ui tokens mapped to brand tokens */
+  --background: var(--brand-background);
+  --foreground: var(--brand-text-primary);
+
+  --card: var(--brand-surface);
+  --card-foreground: var(--brand-text-primary);
+
+  --popover: var(--brand-elevated);
+  --popover-foreground: var(--brand-text-primary);
+
+  /* Primary = the acid-lime CTA color. Used deliberately sparingly: only
+     the shadcn "default" button/badge variant and focus rings draw on it.
+     Everything else uses secondary/outline/ghost/muted. */
+  --primary: var(--brand-lime);
+  --primary-foreground: #0d0f0d;
+
+  --secondary: var(--brand-elevated);
+  --secondary-foreground: var(--brand-text-primary);
+
+  --muted: var(--brand-surface);
+  --muted-foreground: var(--brand-text-secondary);
+
+  --accent: var(--brand-elevated);
+  --accent-foreground: var(--brand-text-primary);
+
+  --destructive: var(--brand-warning);
+  --destructive-foreground: #2a0a0a;
+
+  --border: var(--brand-border);
+  --input: var(--brand-border);
+  --ring: var(--brand-lime);
+
+  --chart-1: var(--brand-lime);
+  --chart-2: #7fb3ff;
+  --chart-3: #f5f3ea;
+  --chart-4: #a8aea5;
+  --chart-5: var(--brand-warning);
+
+  --sidebar: var(--brand-surface);
+  --sidebar-foreground: var(--brand-text-primary);
+  --sidebar-primary: var(--brand-lime);
+  --sidebar-primary-foreground: #0d0f0d;
+  --sidebar-accent: var(--brand-elevated);
+  --sidebar-accent-foreground: var(--brand-text-primary);
+  --sidebar-border: var(--brand-border);
+  --sidebar-ring: var(--brand-lime);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Direct brand tokens, exposed as utilities (bg-lime, text-lime, etc.) */
+  --color-lime: var(--brand-lime);
+  --color-warning: var(--brand-warning);
+  --color-surface: var(--brand-surface);
+  --color-elevated: var(--brand-elevated);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
