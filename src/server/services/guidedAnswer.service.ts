@@ -494,6 +494,65 @@ function offerFieldPatch(field: string | null, value: AnswerValue): Record<strin
   return { [field]: String(value) };
 }
 
+export type SetupSummary = {
+  clientName: string;
+  audience: string | null;
+  whatIsHappening: string | null;
+  beliefToChallenge: string | null;
+  betterUnderstanding: string | null;
+  betterDecision: string | null;
+  offerName: string | null;
+  ctaRoute: string | null;
+  voice: string | null;
+  allAnswers: { section: string; label: string; value: string }[];
+};
+
+/** The Final Review screen's plain-language summary (spec section 18) — never raw JSON, never technical field names. */
+export async function getSetupSummary(clientId: string): Promise<SetupSummary> {
+  const [client, cohort, offer, latestSession] = await Promise.all([
+    prisma.client.findUniqueOrThrow({ where: { id: clientId } }),
+    prisma.cohort.findFirst({ where: { clientId, status: { not: "ARCHIVED" } }, orderBy: { updatedAt: "desc" } }),
+    prisma.offer.findFirst({ where: { clientId, status: { not: "ARCHIVED" } }, orderBy: { updatedAt: "desc" } }),
+    prisma.guidedSetupSession.findFirst({ where: { clientId }, orderBy: { startedAt: "desc" } }),
+  ]);
+
+  const [situation, belief] = cohort
+    ? await Promise.all([
+        prisma.commercialSituation.findFirst({ where: { cohortId: cohort.id }, orderBy: { updatedAt: "desc" } }),
+        prisma.beliefMap.findFirst({ where: { cohortId: cohort.id, archivedAt: null }, orderBy: { updatedAt: "desc" } }),
+      ])
+    : [null, null];
+
+  const answers = latestSession
+    ? await prisma.guidedSetupAnswer.findMany({ where: { sessionId: latestSession.id, approvalStatus: "APPROVED" } })
+    : [];
+  const questions = await prisma.guidedSetupQuestionDefinition.findMany({ where: { key: { in: answers.map((a) => a.questionKey) } } });
+  const questionByKey = new Map(questions.map((q) => [q.key, q]));
+
+  const allAnswers = answers
+    .filter((a) => a.normalizedValue)
+    .map((a) => {
+      const q = questionByKey.get(a.questionKey);
+      return { section: q?.section ?? "BUSINESS", label: q?.plainLanguageLabel ?? a.questionKey, value: a.normalizedValue! };
+    });
+
+  const voiceKeys = new Set(["voice.language", "voice.dialect", "voice.tones"]);
+  const voiceParts = answers.filter((a) => voiceKeys.has(a.questionKey) && a.normalizedValue).map((a) => a.normalizedValue!);
+
+  return {
+    clientName: client.displayName,
+    audience: cohort?.name ?? null,
+    whatIsHappening: situation?.activeProblem ?? null,
+    beliefToChallenge: belief?.currentBeliefStatement ?? null,
+    betterUnderstanding: belief?.betterBeliefStatement ?? null,
+    betterDecision: belief?.betterCommercialDecision ?? null,
+    offerName: offer?.name ?? null,
+    ctaRoute: offer?.ctaRoute ?? null,
+    voice: voiceParts.length > 0 ? voiceParts.join(", ") : null,
+    allAnswers,
+  };
+}
+
 function proofFieldPatch(field: string | null, value: AnswerValue): Record<string, unknown> {
   if (!field) return {};
   if (field === "limitations") {

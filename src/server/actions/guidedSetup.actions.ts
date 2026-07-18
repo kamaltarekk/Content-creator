@@ -5,7 +5,14 @@ import { revalidatePath } from "next/cache";
 import { requireAction } from "@/server/auth/permissions";
 import { prisma } from "@/server/db/prisma";
 import { startOrResumeGuidedSetup, completeGuidedSetup } from "@/server/services/guidedSetup.service";
-import { getNextQuestion, submitAnswer, skipQuestion, requestAiSuggestion, type AnswerValue } from "@/server/services/guidedAnswer.service";
+import {
+  getNextQuestion,
+  submitAnswer,
+  skipQuestion,
+  requestAiSuggestion,
+  getSetupSummary,
+  type AnswerValue,
+} from "@/server/services/guidedAnswer.service";
 
 export async function startGuidedSetupAction(clientId: string, entryMode?: "FULL_GUIDED" | "FAST_IMPORT") {
   const session = await requireAction("setup.edit", { clientId });
@@ -23,8 +30,13 @@ export async function startGuidedSetupAction(clientId: string, entryMode?: "FULL
 
 export async function getNextQuestionAction(sessionId: string, clientId: string) {
   await requireAction("setup.view", { clientId });
-  const next = await getNextQuestion(sessionId, clientId);
-  if (!next) return null;
+  const [next, totalActive, answeredCount] = await Promise.all([
+    getNextQuestion(sessionId, clientId),
+    prisma.guidedSetupQuestionDefinition.count({ where: { isActive: true } }),
+    prisma.guidedSetupAnswer.count({ where: { sessionId } }),
+  ]);
+  const progress = { answeredCount, totalActive };
+  if (!next) return { question: null, section: null, trusted: null, progress };
   return {
     question: {
       key: next.question.key,
@@ -40,6 +52,7 @@ export async function getNextQuestionAction(sessionId: string, clientId: string)
     },
     section: next.section,
     trusted: next.trusted,
+    progress,
   };
 }
 
@@ -73,6 +86,11 @@ export async function skipQuestionAction(input: { sessionId: string; clientId: s
 export async function requestAiSuggestionAction(clientId: string, questionKey: string) {
   await requireAction("setup.edit", { clientId });
   return requestAiSuggestion({ clientId, questionKey });
+}
+
+export async function getSetupSummaryAction(clientId: string) {
+  await requireAction("setup.view", { clientId });
+  return getSetupSummary(clientId);
 }
 
 export async function completeGuidedSetupAction(sessionId: string, clientId: string) {

@@ -39,6 +39,18 @@ function next(): number {
   return order;
 }
 
+export const SECTION_LABELS: Record<GuidedSetupSection, string> = {
+  BUSINESS: "The Business",
+  AUDIENCE: "The Audience",
+  BELIEF_DECISION: "The Belief and Decision",
+  OFFER: "The Offer",
+  PROOF: "The Proof",
+  VOICE: "The Voice",
+  EXECUTION: "Reel Execution",
+  SAFETY: "Safety and Constraints",
+  FINAL_REVIEW: "Final Review",
+};
+
 export const QUESTION_CATALOG: QuestionCatalogEntry[] = [
   // ---- Section 1: The Business ----
   {
