@@ -106,3 +106,65 @@ Pure, dependency-free, and unit-tested:
 ## Completeness score
 
 `computeCompleteness(items)` (pure) — per weighted section: `coverage` = fraction of critical fields present (best-populated group for entity sections), `score` = `coverage × avgConfidence` (manual items count as fully confident), overall = weighted sum across the 10 scored sections. The other 4 sections are tracked but unweighted. Always presented as a "setup-completeness indicator", never an objective quality score.
+
+## Module 2 — Cohort + Buying Decision + Belief Intelligence
+
+Additive on top of everything above: new services, new domain rules, new routes under `(app)/c/[clientId]/strategy/`, reusing the same request lifecycle, permission wrappers, `AIProvider`/`getAIProvider()`/`pLimit` seam, and `$transaction` + version-row + traceability conventions. No Module 1 file was rewritten to build it.
+
+### Service map
+
+```
+cohort.service.ts               Cohort + CohortVersion + CohortSourceReference; merge/split
+commercialSituation.service.ts  CommercialSituation + CommercialSituationVersion
+buyingDecision.service.ts       BuyingDecision + BuyingDecisionVersion
+buyingCommittee.service.ts      BuyingRoleParticipant / Objection / DecisionCriterion (unversioned children)
+belief.service.ts               BeliefMap + BeliefMapVersion
+evidenceLink.service.ts         EvidenceLink (lightweight; full Evidence/Claims Vault is a later module)
+strategicEntity.service.ts      upsert/remove the StrategicEntity reference row on entity create/rename/archive
+strategicRelationship.service.ts StrategicRelationship; rejects cross-client relationships server-side
+strategyConflict.service.ts     deterministic duplicate detection (Dice coefficient) against the live DB
+strategySuggestion.service.ts   generateStrategySuggestion / resolveSuggestion / bulkApproveSuggestions
+strategyReadiness.service.ts    computeStrategyReadiness (pure) + live aggregation + snapshot persistence
+```
+
+Every entity service that creates or renames a row also calls `upsertStrategicEntity()`, keeping the Strategic Relationship Graph's reference layer in sync without any batch job.
+
+### Deterministic quality gates (`server/domain/`)
+
+- `cohort-quality.ts` — `validateCohortQuality()`: flags a cohort that reads as a demographic label (short name, no situational markers, no grounded definition) and flags missing links to a commercial situation, trigger, or buying decision. Never rewrites — only reports `{score, level, issues[]}`.
+- `belief-quality.ts` — `validateBeliefQuality()`: the 6-part completeness check (current belief, behavior, consequence, evidence-or-flagged-gap, materially-different better belief, actionable better decision). A trivial reframe is caught two ways: a Dice-coefficient similarity above threshold between current and better belief, or a small hard-coded antonym-pair list (difficult/easy, hard/easy, ...) — either flags `isTrivialReframe`.
+- `evidence.ts` — `evidenceState()`: pure classification into missing/weak/exists/contradictory. Deliberately kept out of any `"server-only"` file so `EvidenceBadge` (a client component) can import it directly.
+- `strategy-conflict.ts` — `findMostSimilar()` (Dice coefficient, same primitive as Module 1's `similarity.ts`) for duplicate detection, and `isBulkApprovable()` (confidence ≥ 0.75, not a duplicate candidate, zero possible conflicts) — the single source of truth the review-queue UI and the bulk-approve server action share.
+
+### AI Strategy Suggestion pipeline
+
+```
+generateStrategySuggestion (strategySuggestion.service)
+  ├─ build authorized, client-scoped context (Client Brain digest, existing
+  │  cohort/belief digest with ids, selected audience signals)
+  ├─ AIProvider.suggestStrategy()  — JSON-mode, Zod-validated (StrategySuggestionSchema)
+  ├─ detectSuggestionDuplicate (strategyConflict.service) — independent, deterministic
+  │  check against the live DB, regardless of what the AI itself reported
+  └─ persist StrategySuggestion(AI_SUGGESTED) + StrategySuggestionReview(PENDING)
+
+resolveSuggestion (strategySuggestion.service) — the single dispatcher for every
+human action: APPROVE / EDIT_APPROVE / REJECT / KEEP_HYPOTHESIS / MERGE /
+ATTACH_COHORT / ATTACH_EVIDENCE / MARK_RESEARCH / DEFER. Only the first four
+(and the two ATTACH_* actions) ever create or attach data; every action
+resolves the review and is audited (a new `SUGGEST` AuditAction records
+generation, `APPROVE`/`REJECT` record the resolution).
+
+bulkApproveSuggestions — loops the requested ids, applies isBulkApprovable()
+per suggestion, and only calls resolveSuggestion(..., "APPROVE") for the ones
+that pass; everything else is skipped, never forced.
+```
+
+`proposed_fields` is a `Record<string, string|string[]|number|null>` because its shape genuinely varies by `suggestion_type` (documented in the OpenAI system prompt); `applySuggestionAsEntity()` reads known keys per type (`asStr`/`asNum` helpers) and falls back to a reviewer-supplied target id (`targetCohortId`/`targetDecisionId`/`targetEntityId`) when the AI didn't — or couldn't — supply one.
+
+### Strategic Relationship Graph
+
+`StrategicEntity` is a thin, denormalized reference row (`entityType` + `entityId` + `title` + `status`) — never a copy of the real entity's fields. `StrategicRelationship` connects two `StrategicEntity` rows via real Prisma relations (two named relations to the same model, `RelationshipFrom`/`RelationshipTo`), which is what makes cross-client prevention a simple, server-side equality check: both endpoints' `clientId` must equal the relationship's `clientId`, or `createStrategicRelationship` throws `CrossClientRelationshipError` before anything is written.
+
+### Strategy Setup Readiness
+
+`computeStrategyReadiness(stats)` mirrors `computeCompleteness`'s shape exactly, but the unit of analysis is the **cohort**, not a Client Brain field: each of the 8 weighted categories (cohort definition 20, situations 15, triggers 10, decisions 15, committee 10, beliefs 15, evidence 10, better decisions 5) is the fraction of cohorts for which that part of the chain is populated. `getPerCohortReadiness()` reuses the same underlying query to produce a per-cohort gap list, and `getSpecificFollowUpQuestions()` pairs the generic per-category question with the actual cohort missing it — never a context-free prompt. `createReadinessSnapshot()` persists a point-in-time `StrategyReadinessSnapshot` on demand; nothing is snapshotted automatically.

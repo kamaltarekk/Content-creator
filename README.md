@@ -1,10 +1,11 @@
-# Commercial Attention OS — Module 1
+# Commercial Attention OS — Modules 1 & 2
 
-**Multi-Client Workspace + Source Importer + Client Brain**
+**Module 1: Multi-Client Workspace + Source Importer + Client Brain**
+**Module 2: Cohort + Buying Decision + Belief Intelligence**
 
-The first production module of a multi-client commercial strategy and content operating system. It establishes the foundational architecture so later modules (script generation, offer analysis, competitor analysis, analytics) can be added without refactoring the data model.
+A multi-client commercial strategy and content operating system, built module by module without refactoring the data model. Module 1 establishes the foundational architecture (auth, permissions, source import, the Client Brain). Module 2 builds directly on top of it, turning the approved Client Brain into a **commercial reasoning system**: cohort → commercial situation → trigger → active problem → current workflow → current belief → behavior → commercial consequence → objection/risk → evidence → better belief → better commercial decision.
 
-The core product rule: **the Source Library (everything uploaded) and the Client Brain (only reviewed and approved strategic knowledge) are structurally distinct.** Nothing AI-extracted is ever auto-trusted — every Client Brain item is human-approved and fully source-traceable.
+The core product rule carries through both modules: **nothing AI-extracted or AI-suggested is ever auto-trusted.** Every Client Brain item and every strategy entity (cohort, situation, decision, belief) is human-approved and fully source-traceable, with a version history that's never overwritten.
 
 ---
 
@@ -16,6 +17,9 @@ The core product rule: **the Source Library (everything uploaded) and the Client
 - **Source-traceable & version-controlled**: every approved item links back to its exact source (file, block, approver, timestamp) and keeps full version history.
 - **Conflict-safe**: a new value that materially differs from approved strategy opens a Conflict and is never silently overwritten.
 - **Completeness & gaps**: a confidence-weighted setup-completeness indicator and a missing-data report with specific follow-up questions.
+- **Module 2 — a commercial reasoning system, not a persona generator**: cohorts are grounded in a real commercial situation (never a demographic label), buying decisions map who's actually involved and what they need to believe, and the Belief-to-Decision Engine forces every "wrong belief" through a materially-different reframe before it can be approved — never a trivial antonym swap.
+- **AI strategy suggestions are reviewed, not applied**: every AI-suggested cohort/situation/decision/belief carries confidence, source references, missing evidence, and possible conflicts, and sits in a review queue until a human approves, edits, merges, or rejects it. Bulk approval only ever touches high-confidence, non-duplicate, conflict-free suggestions.
+- **A thin reference layer, not a duplicate graph**: the Strategic Relationship Graph connects cohorts, situations, decisions, beliefs, and evidence without copying their data, and rejects cross-client relationships server-side regardless of what the UI sends.
 
 ---
 
@@ -30,7 +34,7 @@ The core product rule: **the Source Library (everything uploaded) and the Client
 | Database | PostgreSQL + Prisma ORM |
 | Jobs | In-process `LocalJobRunner` backed by the `SourceProcessingJob` table (swap-ready for BullMQ/Inngest/Trigger.dev) |
 | Storage | `StorageProvider` interface + local filesystem impl (swap-ready for S3) |
-| AI | `AIProvider` interface + OpenAI implementation (structured JSON validated by Zod) |
+| AI | `AIProvider` interface + OpenAI implementation (structured JSON validated by Zod) — `classifyBlock` (Module 1) and `suggestStrategy` (Module 2) |
 | Tests | Vitest (unit + integration), Playwright (e2e) |
 
 ---
@@ -124,13 +128,41 @@ Each block is sent to the `AIProvider` (`server/providers/ai/`). The OpenAI impl
 
 On approval, `clientBrainService.applyApproval` writes the item with a version row and a source-traceability link — unless the value materially conflicts with an existing approved item, in which case it opens a `Conflict` (marking the existing item `DISPUTED`) and refuses to overwrite until the conflict is explicitly resolved.
 
+## Module 2 — Cohort + Buying Decision + Belief Intelligence
+
+Builds a normalized reasoning layer on top of the Client Brain — new models, not new `ClientBrainFieldKey`s. Existing Client Brain COHORTS/BELIEFS/PROOF items are referenced as sources (`CohortSourceReference`, `EvidenceLink`), never duplicated or overwritten.
+
+**Tools:**
+
+| Tool | Route | Purpose |
+|---|---|---|
+| Strategy Intelligence Overview | `/c/[clientId]/strategy` | Entity counts, Strategy Setup Readiness, pending suggestions, recent cohorts |
+| Cohort Lab + Cohort Detail | `/strategy/cohorts` | Create/edit/approve/merge/split cohorts; quality validator; source traceability |
+| Buying Decision Map + Committee Mapper | `/strategy/decisions` | Every buying decision across cohorts; a lightweight visual (no graph library) always paired with an accessible, editable table for the buying committee, objections, and decision criteria |
+| Belief-to-Decision Engine | `/strategy/beliefs` | The central 11-part reasoning chain; 3-pane detail (reasoning chain / evidence / validation) |
+| Strategic Relationship Graph | `/strategy/relationships` | A thin reference layer (`StrategicEntity` + `StrategicRelationship`) connecting cohorts/situations/decisions/beliefs/evidence without duplicating their data |
+| AI Suggestion Review Queue | `/strategy/reviews` | Every AI-proposed entity, with confidence/source/reasoning/missing-evidence/conflicts, resolved by an explicit human action |
+| Strategy Setup Readiness | `/strategy/readiness` | Weighted setup-completeness score, per-cohort gap breakdown, specific follow-up questions, saved snapshots |
+
+**The reasoning chain:** Cohort → Commercial Situation → Trigger → Active Problem → Current Workflow → Current Belief → Behavior → Commercial Consequence → Objection/Risk → Evidence → Better Belief → Better Commercial Decision.
+
+**Quality gates (deterministic, never auto-rewrite):**
+- `cohort-quality.ts` flags cohorts that read as a demographic label ("Women 25–45") instead of a grounded commercial situation, and cohorts missing a linked situation, trigger, or buying decision.
+- `belief-quality.ts` flags trivial reframes — a "better belief" that's a one-word antonym swap (e.g. "Marketing is difficult" → "Marketing can be easy") or too similar (Dice coefficient) to the current belief — and requires an actionable, developed better commercial decision.
+- `evidence.ts` classifies a belief's evidence as **missing / weak / exists / contradictory** (a single `DISPUTED` link always wins, even next to strong evidence), and the UI always shows which state applies.
+
+**AI Strategy Suggestion pipeline:** `AIProvider.suggestStrategy()` proposes one entity (cohort/situation/decision/committee member/belief/evidence link/relationship) from authorized, client-scoped context only — never inventing facts. Every suggestion is Zod-validated (`StrategySuggestionSchema`), persisted as `AI_SUGGESTED` with a `PENDING` `StrategySuggestionReview`, and independently checked against the live database for duplicates (Dice-coefficient name/statement matching) regardless of what the AI itself reports. Nothing is ever auto-approved. A human resolves each suggestion with one of nine actions — approve, edit & approve, reject, keep as hypothesis, merge (into a detected duplicate), attach to an existing cohort, attach as evidence, mark for research, or defer — and every resolution is audited. Bulk approval only ever applies to suggestions that are simultaneously high-confidence, non-duplicate, and conflict-free; anything else is skipped, never forced.
+
+**Client isolation is absolute at the graph layer too:** `strategicRelationship.service.ts` rejects a relationship whose two `StrategicEntity` endpoints belong to different clients, server-side, regardless of what the UI sends.
+
 ## Permission model
 
 Roles: `OWNER`, `ADMIN`, `STRATEGIST`, `EDITOR`, `VIEWER`, `CLIENT_APPROVER`.
 
 - Org-wide roles (all but `CLIENT_APPROVER`) grant their actions across every client in the org.
 - `CLIENT_APPROVER` gets **no** access from org membership alone — only through an explicit `ClientMember` row, so it can review/approve one assigned client and cannot see others.
-- `EDITOR` can view the brain, edit drafts, and approve non-conflict items, but cannot approve conflicts or resolve them.
+- `EDITOR` can view the brain, edit drafts, and approve non-conflict items, but cannot approve conflicts or resolve them. The same split applies to Module 2 (`strategy.edit` vs. `strategy.approve` / `strategy.approve.conflict`) — `EDITOR` can draft cohorts/beliefs/etc. but cannot approve them, approve a conflict, or resolve a dispute.
+- `strategy.suggest` (triggering AI generation) is granted to the same roles as `strategy.approve` (`OWNER`/`ADMIN`/`STRATEGIST`).
 
 All authorization is enforced server-side (`server/auth/permissions.ts` → `requireAction` / `requireClientAccess`). Component-level role checks are UX only.
 
@@ -144,7 +176,9 @@ pnpm typecheck    # tsc --noEmit
 pnpm build        # production build
 ```
 
-Coverage highlights: classification schema validation, brain-schema integrity, conflict-detection rules, completeness calculation, permission matrix, source-location preservation, duplicate detection (unit); classification, review→approval→traceability, conflict resolution, duplicate detection (integration); and the full sign-in → create-client → upload → process → review → resolve-conflict → Client Brain → source-trace journey (e2e).
+Coverage highlights — **Module 1**: classification schema validation, brain-schema integrity, conflict-detection rules, completeness calculation, permission matrix, source-location preservation, duplicate detection (unit); classification, review→approval→traceability, conflict resolution, duplicate detection (integration); and the full sign-in → create-client → upload → process → review → resolve-conflict → Client Brain → source-trace journey (e2e).
+
+Coverage highlights — **Module 2**: cohort quality, belief quality (trivial-reframe detection), strategy permission matrix, evidence-state classification, duplicate matching + bulk-approvability, readiness calculation, AI strategy-suggestion schema validation (unit); cross-client relationship prevention, cohort version preservation, the AI suggestion pipeline (generate → pending review → approve creates the entity / reject creates nothing → duplicate detection → bulk-approve skips low-confidence), and the full chain — create cohort → link source → add situation → add decision → add buying-role participant → create belief map → link evidence → approve an AI suggestion → detect a duplicate → readiness moves off zero → every step audited (integration); and the full cohort → committee → belief → AI review → relationships → readiness journey against the seeded client (e2e).
 
 ## Known limitations
 
@@ -156,10 +190,14 @@ Coverage highlights: classification schema validation, brain-schema integrity, c
 - **XLSX** uses `exceljs` (not SheetJS/`xlsx`, whose npm distribution is frozen).
 - **Search** uses Postgres `ILIKE` behind a `searchService` abstraction; a full-text/vector backend can replace it without changing callers.
 - **Team management** is a read view (members + roles + assignments); invitations and role changes are a planned next step.
+- **Module 2 AI suggestions** are optional in the same way classification is: without `OPENAI_API_KEY`, `suggestStrategy()` throws rather than fabricating a suggestion; the seeded demo ships three pre-made suggestions (an AI-suggested cohort, a duplicate candidate, a conflicting buying-role suggestion) so the review queue is explorable keyless.
+- **Auto-appliable suggestion types**: the review queue can directly create a `Cohort`, `CommercialSituation`, `BuyingDecision`, `BuyingRoleParticipant`, `BeliefMap`, `EvidenceLink`, or `StrategicRelationship` from an approved suggestion. Types needing a parent (a situation/decision/belief needs a target cohort; a committee member needs a target decision) let the reviewer pick or override the target before approving.
+- **Buying Committee visualization** is a lightweight, self-contained influence-axis layout (no external graph library) — always paired with an accessible table, which is the actual editable surface. The Strategic Relationship Graph uses the same pattern.
+- **Evidence linking** in Module 2 is intentionally lightweight (a description + strength + optional trace to an existing Client Brain PROOF/LEARNINGS item); a full Evidence/Claims Vault with structured claims and citations is a later module.
 
 ## Recommended next module
 
-**Client Strategy & Offers** — build on the approved Client Brain to structure offers, cohorts, and positioning into a scored strategy, then layer script generation on top. The data model already separates Offers/Cohorts/Beliefs/Positioning as first-class sections, so this module consumes the Client Brain rather than re-deriving it.
+**Offer + Proof + Claims Architecture** — build on the approved Client Brain and the Module 2 reasoning layer (cohorts, buying decisions, beliefs, `relevantOfferPlaceholder`) to structure offers, proof assets, and claims into a governed, evidence-backed library, replacing the current free-text placeholders and lightweight `EvidenceLink` rows with first-class, versioned entities. That data — a cohort's better belief and better commercial decision, paired with a specific offer and its proof — is what later script-generation modules will consume directly.
 
 ---
 
