@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAction } from "@/server/auth/permissions";
 import { uploadMetadataSchema, parseTagList } from "@/server/domain/source-schema";
 import { uploadSource, UploadValidationError } from "@/server/services/source.service";
+import { ensureJobRunnerStarted } from "@/server/jobs/local.job.runner";
 
 export type UploadSourceState = {
   error: string | null;
@@ -63,6 +64,9 @@ export async function uploadSourceAction(
     }
     throw error;
   }
+
+  // Ensure the in-process worker is polling so the queued job gets picked up.
+  ensureJobRunnerStarted();
 
   redirect(`/c/${clientId}/sources/${sourceId}`);
 }

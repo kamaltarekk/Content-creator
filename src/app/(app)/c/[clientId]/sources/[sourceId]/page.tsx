@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SourceStatusPoller } from "@/components/sources/source-status-poller";
 
 export default async function SourceDetailPage({
   params,
@@ -43,7 +44,9 @@ export default async function SourceDetailPage({
         <Card className="py-4">
           <CardContent className="px-4">
             <p className="text-xs text-muted-foreground">Processing status</p>
-            <p className="mt-1 font-medium text-foreground">{source.processingStatus}</p>
+            <div className="mt-1">
+              <SourceStatusPoller sourceId={source.id} initialStatus={source.processingStatus} />
+            </div>
           </CardContent>
         </Card>
         <Card className="py-4">
