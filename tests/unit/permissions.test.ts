@@ -67,4 +67,35 @@ describe("permission checks", () => {
     expect(can(null, "brain.view", { clientId: "c1" })).toBe(false);
     expect(hasClientAccess(null, "c1")).toBe(false);
   });
+
+  it("STRATEGIST has full strategy permissions including conflict approval and suggestion", () => {
+    const session = sessionWith("STRATEGIST");
+    expect(can(session, "strategy.view", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.edit", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.approve", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.approve.conflict", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.suggest", { clientId: "c1" })).toBe(true);
+  });
+
+  it("EDITOR can view/edit strategy drafts but cannot approve disputed beliefs or resolve conflicts", () => {
+    const session = sessionWith("EDITOR");
+    expect(can(session, "strategy.view", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.edit", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.approve", { clientId: "c1" })).toBe(false);
+    expect(can(session, "strategy.approve.conflict", { clientId: "c1" })).toBe(false);
+  });
+
+  it("VIEWER can only view strategy", () => {
+    const session = sessionWith("VIEWER");
+    expect(can(session, "strategy.view", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.edit", { clientId: "c1" })).toBe(false);
+  });
+
+  it("CLIENT_APPROVER can view and approve strategy (incl. conflicts) only for its assigned client", () => {
+    const session = sessionWith("CLIENT_APPROVER", { c1: "CLIENT_APPROVER" });
+    expect(can(session, "strategy.approve", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.approve.conflict", { clientId: "c1" })).toBe(true);
+    expect(can(session, "strategy.edit", { clientId: "c1" })).toBe(false);
+    expect(can(session, "strategy.approve", { clientId: "c2" })).toBe(false);
+  });
 });

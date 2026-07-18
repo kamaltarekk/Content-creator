@@ -315,6 +315,192 @@ enum AuditAction {
   CONFLICT_RESOLVE
   LOGIN
   LOGOUT
+  MERGE
+  SPLIT
+  SUGGEST
+}
+
+// =========================================================================
+// MODULE 2 ENUMS — Cohort + Buying Decision + Belief Intelligence
+// =========================================================================
+
+/**
+ * Shared lifecycle for every Module-2 strategy entity. Distinct from ClientBrainItemStatus.
+ */
+enum StrategyEntityStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/**
+ * Human-approval trust state for AI-influenced strategy entities. Mirrors the
+ * Client Brain trust boundary: AI_SUGGESTED never implies approved, and
+ * nothing here is ever silently promoted to APPROVED without a human action.
+ */
+enum StrategyApprovalStatus {
+  AI_SUGGESTED
+  DRAFT
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  DISPUTED
+}
+
+enum CohortPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum EvidenceStrength {
+  ANECDOTAL
+  WEAK
+  MODERATE
+  STRONG
+  VERIFIED
+  DISPUTED
+}
+
+enum TriggerType {
+  EVENT
+  PERFORMANCE_CHANGE
+  LIFE_STAGE
+  BUSINESS_STAGE
+  INTERNAL_PRESSURE
+  EXTERNAL_PRESSURE
+  DEADLINE
+  OPPORTUNITY
+  FAILURE
+  RISK
+  REGULATORY_CHANGE
+  MARKET_CHANGE
+  OTHER
+}
+
+enum DecisionType {
+  PROBLEM_RECOGNITION
+  CATEGORY_SELECTION
+  BRAND_SELECTION
+  OFFER_SELECTION
+  BUDGET_APPROVAL
+  INTERNAL_ALIGNMENT
+  VENDOR_REPLACEMENT
+  RENEWAL
+  EXPANSION
+  IMPLEMENTATION
+  OTHER
+}
+
+enum BuyingRole {
+  USER
+  INITIATOR
+  INFLUENCER
+  CHAMPION
+  EVALUATOR
+  APPROVER
+  DECISION_MAKER
+  PAYER
+  BLOCKER
+  PROCUREMENT
+  LEGAL
+  TECHNICAL_REVIEWER
+  OTHER
+}
+
+enum BeliefType {
+  WRONG
+  INCOMPLETE
+  MISAPPLIED
+  OUTDATED
+  UNSUPPORTED
+  CONTEXT_DEPENDENT
+  LIMITING
+  CATEGORY_ASSUMPTION
+  PROCESS_ASSUMPTION
+  METRIC_ASSUMPTION
+  RISK_ASSUMPTION
+  OTHER
+}
+
+/**
+ * How a cohort source reference relates to the cohort it's attached to.
+ */
+enum CohortSourceRelationshipType {
+  SUPPORTS
+  CONTRADICTS
+  INSPIRED_BY
+  VALIDATES
+  WEAK_SIGNAL
+  STRONG_SIGNAL
+  CONTEXT_ONLY
+}
+
+/**
+ * The reference-layer entity kinds the Strategic Relationship Graph can connect.
+ */
+enum StrategicEntityType {
+  CLIENT_BRAIN_ITEM
+  COHORT
+  COMMERCIAL_SITUATION
+  BUYING_DECISION
+  BUYING_ROLE
+  BELIEF
+  OBJECTION
+  EVIDENCE
+  OFFER
+  PROOF
+  CONSTRAINT
+}
+
+enum StrategicRelationshipType {
+  EXPERIENCES
+  TRIGGERED_BY
+  BELIEVES
+  CAUSED_BY
+  CAUSES
+  BLOCKED_BY
+  REQUIRES
+  EVALUATES_BY
+  PARTICIPATES_IN
+  SUPPORTS
+  CONTRADICTS
+  REFRAMES
+  CHANGES_DECISION
+  SERVED_BY
+  RELEVANT_TO
+  VALIDATES
+  INVALIDATES
+}
+
+/**
+ * What kind of strategy entity an AI suggestion proposes to create or attach to.
+ */
+enum StrategySuggestionType {
+  COHORT
+  COMMERCIAL_SITUATION
+  BUYING_DECISION
+  BUYING_ROLE_PARTICIPANT
+  BELIEF_MAP
+  EVIDENCE_LINK
+  RELATIONSHIP
+  OTHER
+}
+
+/**
+ * The human decision recorded against an AI strategy suggestion. Never bulk-applied to conflicts or disputed beliefs.
+ */
+enum StrategySuggestionAction {
+  APPROVE
+  EDIT_APPROVE
+  REJECT
+  KEEP_HYPOTHESIS
+  MERGE
+  ATTACH_COHORT
+  ATTACH_EVIDENCE
+  MARK_RESEARCH
+  DEFER
 }
 
 // =========================================================================
@@ -388,6 +574,17 @@ model Client {
   missingDataItems MissingDataItem[]
   tags             Tag[]
   auditLogs        AuditLog[]
+
+  // Module 2 — Cohort + Buying Decision + Belief Intelligence
+  cohorts                    Cohort[]
+  commercialSituations       CommercialSituation[]
+  buyingDecisions            BuyingDecision[]
+  beliefMaps                 BeliefMap[]
+  evidenceLinks              EvidenceLink[]
+  strategicEntities          StrategicEntity[]
+  strategicRelationships     StrategicRelationship[]
+  strategySuggestions        StrategySuggestion[]
+  strategyReadinessSnapshots StrategyReadinessSnapshot[]
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
@@ -729,4 +926,525 @@ model AuditLog {
   @@index([clientId, createdAt])
   @@index([organizationId, createdAt])
   @@index([entityType, entityId])
+}
+
+// =========================================================================
+// MODULE 2 — COHORT + BUYING DECISION + BELIEF INTELLIGENCE
+//
+// Turns the approved Client Brain into a commercial reasoning system:
+// Cohort -> Commercial Situation -> Trigger -> Active Problem ->
+// Current Workflow -> Current Belief -> Behavior -> Commercial Consequence
+// -> Objection/Risk -> Evidence -> Better Belief -> Better Commercial
+// Decision. New, normalized models; existing Client Brain COHORTS/BELIEFS
+// items are referenced as sources (CohortSourceReference / EvidenceLink),
+// never duplicated or overwritten.
+// =========================================================================
+
+model Cohort {
+  id       String @id @default(cuid())
+  clientId String
+
+  // IDENTITY
+  name       String
+  definition String? // grounded, evidence-based description — never a fictional persona bio
+  priority   CohortPriority @default(MEDIUM)
+
+  // COMMERCIAL CONTEXT
+  role              String? // this cohort's role/title inside the business (e.g. "Marketing Manager")
+  commercialContext String? // why this cohort matters commercially right now
+
+  // CURRENT STATE
+  currentWorkflow String?
+  currentBelief   String?
+  desiredOutcome  String?
+
+  // PSYCHOLOGICAL AND DECISION CONTEXT
+  decisionRisk     String?
+  emotionalDrivers String[]
+
+  // CONTENT AND ATTENTION CONTEXT
+  platformPresence String[]
+  attentionNotes   String?
+
+  status               StrategyEntityStatus   @default(DRAFT)
+  approvalStatus       StrategyApprovalStatus @default(DRAFT)
+  confidence           Float?
+  currentVersionNumber Int                    @default(1)
+  createdById          String
+  updatedById          String?
+  archivedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  client               Client                  @relation(fields: [clientId], references: [id])
+  versions             CohortVersion[]
+  sourceReferences     CohortSourceReference[]
+  commercialSituations CommercialSituation[]
+  buyingDecisions      BuyingDecision[]
+  beliefMaps           BeliefMap[]
+
+  @@index([clientId, status])
+  @@index([clientId, approvalStatus])
+}
+
+model CohortVersion {
+  id       String @id @default(cuid())
+  cohortId String
+
+  name              String
+  definition        String?
+  priority          CohortPriority
+  role              String?
+  commercialContext String?
+  currentWorkflow   String?
+  currentBelief     String?
+  desiredOutcome    String?
+  decisionRisk      String?
+  emotionalDrivers  String[]
+  platformPresence  String[]
+  attentionNotes    String?
+  status            StrategyEntityStatus
+  approvalStatus    StrategyApprovalStatus
+  confidence        Float?
+
+  versionNumber Int
+  changeType    ChangeType
+  changedById   String
+  changeNote    String?
+  createdAt     DateTime   @default(now())
+
+  cohort Cohort @relation(fields: [cohortId], references: [id])
+
+  @@unique([cohortId, versionNumber])
+}
+
+/**
+ * Traceability for a cohort back to whatever grounded it — an existing
+ * Client Brain item, a raw extracted item, an audience signal, an evidence
+ * item, or a manual note. Relation-less FK columns (like
+ * ClientBrainItemSource) because a reference can point at any one of several
+ * different object graphs.
+ */
+model CohortSourceReference {
+  id       String @id @default(cuid())
+  cohortId String
+
+  relationshipType   CohortSourceRelationshipType
+  clientBrainItemId  String?
+  extractedItemId    String?
+  sourceId           String?
+  sourceBlockId      String?
+  audienceSignalNote String?
+  note               String?
+
+  linkedById String
+  linkedAt   DateTime @default(now())
+
+  cohort Cohort @relation(fields: [cohortId], references: [id])
+
+  @@index([cohortId])
+}
+
+model CommercialSituation {
+  id       String @id @default(cuid())
+  clientId String
+  cohortId String
+
+  title              String
+  triggerType        TriggerType
+  triggerDescription String?
+  activeProblem      String?
+  currentWorkflow    String?
+  urgencyNote        String?
+
+  status               StrategyEntityStatus   @default(DRAFT)
+  approvalStatus       StrategyApprovalStatus @default(DRAFT)
+  confidence           Float?
+  currentVersionNumber Int                    @default(1)
+  createdById          String
+  archivedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  client          Client                       @relation(fields: [clientId], references: [id])
+  cohort          Cohort                       @relation(fields: [cohortId], references: [id])
+  versions        CommercialSituationVersion[]
+  buyingDecisions BuyingDecision[]
+  beliefMaps      BeliefMap[]
+
+  @@index([clientId, status])
+  @@index([cohortId])
+}
+
+model CommercialSituationVersion {
+  id                    String @id @default(cuid())
+  commercialSituationId String
+
+  title              String
+  triggerType        TriggerType
+  triggerDescription String?
+  activeProblem      String?
+  currentWorkflow    String?
+  urgencyNote        String?
+  status             StrategyEntityStatus
+  approvalStatus     StrategyApprovalStatus
+  confidence         Float?
+
+  versionNumber Int
+  changeType    ChangeType
+  changedById   String
+  changeNote    String?
+  createdAt     DateTime   @default(now())
+
+  commercialSituation CommercialSituation @relation(fields: [commercialSituationId], references: [id])
+
+  @@unique([commercialSituationId, versionNumber])
+}
+
+model BuyingDecision {
+  id       String @id @default(cuid())
+  clientId String
+  cohortId String
+
+  commercialSituationId String?
+
+  title        String
+  decisionType DecisionType
+  description  String?
+  timeframe    String?
+
+  status               StrategyEntityStatus   @default(DRAFT)
+  approvalStatus       StrategyApprovalStatus @default(DRAFT)
+  confidence           Float?
+  currentVersionNumber Int                    @default(1)
+  createdById          String
+  archivedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  client              Client                  @relation(fields: [clientId], references: [id])
+  cohort              Cohort                  @relation(fields: [cohortId], references: [id])
+  commercialSituation CommercialSituation?    @relation(fields: [commercialSituationId], references: [id])
+  versions            BuyingDecisionVersion[]
+  participants        BuyingRoleParticipant[]
+  objections          Objection[]
+  criteria            DecisionCriterion[]
+
+  @@index([clientId, status])
+  @@index([cohortId])
+  @@index([commercialSituationId])
+}
+
+model BuyingDecisionVersion {
+  id               String @id @default(cuid())
+  buyingDecisionId String
+
+  title          String
+  decisionType   DecisionType
+  description    String?
+  timeframe      String?
+  status         StrategyEntityStatus
+  approvalStatus StrategyApprovalStatus
+  confidence     Float?
+
+  versionNumber Int
+  changeType    ChangeType
+  changedById   String
+  changeNote    String?
+  createdAt     DateTime   @default(now())
+
+  buyingDecision BuyingDecision @relation(fields: [buyingDecisionId], references: [id])
+
+  @@unique([buyingDecisionId, versionNumber])
+}
+
+/**
+ * One seat on a specific buying decision's committee. Always paired with an accessible table — never visualization-only.
+ */
+model BuyingRoleParticipant {
+  id               String @id @default(cuid())
+  buyingDecisionId String
+  clientId         String // denormalized for isolation checks / indexing, no formal relation (see ImportReview precedent)
+
+  role           BuyingRole
+  label          String // e.g. "CEO", "Marketing Manager"
+  influenceScore Int? // 1..5, optional
+  stance         String? // e.g. "supportive", "possible blocker"
+  notes          String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  buyingDecision BuyingDecision @relation(fields: [buyingDecisionId], references: [id])
+
+  @@index([buyingDecisionId])
+  @@index([clientId])
+}
+
+model Objection {
+  id               String @id @default(cuid())
+  buyingDecisionId String
+  clientId         String
+
+  title          String
+  description    String?
+  raisedByRole   BuyingRole?
+  severity       CohortPriority       @default(MEDIUM)
+  resolutionNote String?
+  status         StrategyEntityStatus @default(ACTIVE)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  buyingDecision BuyingDecision @relation(fields: [buyingDecisionId], references: [id])
+
+  @@index([buyingDecisionId])
+  @@index([clientId])
+}
+
+model DecisionCriterion {
+  id               String @id @default(cuid())
+  buyingDecisionId String
+  clientId         String
+
+  label      String
+  weightNote String?
+  importance CohortPriority @default(MEDIUM)
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  buyingDecision BuyingDecision @relation(fields: [buyingDecisionId], references: [id])
+
+  @@index([buyingDecisionId])
+  @@index([clientId])
+}
+
+/**
+ * The central reasoning tool: the 11-part chain from an observed situation
+ * through to a better commercial decision. `relevantOfferPlaceholder` is a
+ * free-text placeholder until the Offer + Proof + Claims module exists.
+ */
+model BeliefMap {
+  id       String @id @default(cuid())
+  clientId String
+  cohortId String
+
+  commercialSituationId String?
+
+  observedSituation        String?
+  currentInterpretation    String?
+  currentBeliefStatement   String
+  beliefType               BeliefType @default(WRONG)
+  behaviorCaused           String?
+  commercialConsequence    String?
+  betterBeliefStatement    String?
+  betterCommercialDecision String?
+  relevantOfferPlaceholder String?
+
+  approvalStatus       StrategyApprovalStatus @default(DRAFT)
+  confidence           Float?
+  currentVersionNumber Int                    @default(1)
+  createdById          String
+  archivedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  client              Client               @relation(fields: [clientId], references: [id])
+  cohort              Cohort               @relation(fields: [cohortId], references: [id])
+  commercialSituation CommercialSituation? @relation(fields: [commercialSituationId], references: [id])
+  versions            BeliefMapVersion[]
+  evidenceLinks       EvidenceLink[]
+
+  @@index([clientId, approvalStatus])
+  @@index([cohortId])
+  @@index([commercialSituationId])
+}
+
+model BeliefMapVersion {
+  id          String @id @default(cuid())
+  beliefMapId String
+
+  observedSituation        String?
+  currentInterpretation    String?
+  currentBeliefStatement   String
+  beliefType               BeliefType
+  behaviorCaused           String?
+  commercialConsequence    String?
+  betterBeliefStatement    String?
+  betterCommercialDecision String?
+  relevantOfferPlaceholder String?
+  approvalStatus           StrategyApprovalStatus
+  confidence               Float?
+
+  versionNumber Int
+  changeType    ChangeType
+  changedById   String
+  changeNote    String?
+  createdAt     DateTime   @default(now())
+
+  beliefMap BeliefMap @relation(fields: [beliefMapId], references: [id])
+
+  @@unique([beliefMapId, versionNumber])
+}
+
+/**
+ * Lightweight evidence linking (spec: full Evidence/Claims Vault is a later
+ * module). Links a described piece of evidence — optionally traced to an
+ * existing Client Brain PROOF/EVIDENCE item or a raw source — to any strategy
+ * entity (cohort, situation, decision, belief, objection).
+ */
+model EvidenceLink {
+  id       String @id @default(cuid())
+  clientId String
+
+  targetEntityType StrategicEntityType
+  targetEntityId   String
+  beliefMapId      String? // convenience relation when the target is a BeliefMap, for the belief-detail evidence pane
+
+  description       String
+  evidenceStrength  EvidenceStrength @default(WEAK)
+  clientBrainItemId String?
+  sourceId          String?
+  sourceBlockId     String?
+  note              String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  client    Client     @relation(fields: [clientId], references: [id])
+  beliefMap BeliefMap? @relation(fields: [beliefMapId], references: [id])
+
+  @@index([clientId, targetEntityType, targetEntityId])
+  @@index([beliefMapId])
+}
+
+/**
+ * Thin reference layer for the Strategic Relationship Graph — denormalized
+ * title/status pointing at the real row (relation-less entityId, since it can
+ * reference many different tables incl. ClientBrainItem). Upserted whenever a
+ * strategy entity is created or renamed; relationships connect these rows.
+ */
+model StrategicEntity {
+  id       String @id @default(cuid())
+  clientId String
+
+  entityType StrategicEntityType
+  entityId   String
+  title      String
+  status     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  relationshipsFrom StrategicRelationship[] @relation("RelationshipFrom")
+  relationshipsTo   StrategicRelationship[] @relation("RelationshipTo")
+
+  @@unique([clientId, entityType, entityId])
+  @@index([clientId])
+}
+
+model StrategicRelationship {
+  id       String @id @default(cuid())
+  clientId String
+
+  fromEntityId     String
+  toEntityId       String
+  relationshipType StrategicRelationshipType
+  note             String?
+
+  createdById String
+  createdAt   DateTime @default(now())
+
+  client     Client          @relation(fields: [clientId], references: [id])
+  fromEntity StrategicEntity @relation("RelationshipFrom", fields: [fromEntityId], references: [id])
+  toEntity   StrategicEntity @relation("RelationshipTo", fields: [toEntityId], references: [id])
+
+  @@index([clientId])
+  @@index([fromEntityId])
+  @@index([toEntityId])
+}
+
+/**
+ * An AI-produced strategy suggestion, pending human review. Never auto-
+ * becomes approved strategy — see StrategySuggestionReview. `proposedFields`,
+ * `sourceReferences`, `possibleConflicts`, `suggestedRelationships` are Json
+ * because their shape genuinely varies by suggestionType.
+ */
+model StrategySuggestion {
+  id       String @id @default(cuid())
+  clientId String
+
+  suggestionType         StrategySuggestionType
+  title                  String
+  proposedFields         Json
+  sourceReferences       Json
+  confidence             Float
+  reasoningSummary       String
+  missingEvidence        String[]
+  possibleConflicts      Json?
+  suggestedRelationships Json?
+
+  status                StrategyApprovalStatus @default(AI_SUGGESTED)
+  isDuplicateCandidate  Boolean                @default(false)
+  duplicateOfEntityType StrategicEntityType?
+  duplicateOfEntityId   String?
+
+  aiModel   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client                    @relation(fields: [clientId], references: [id])
+  review StrategySuggestionReview?
+
+  @@index([clientId, status])
+  @@index([clientId, suggestionType])
+}
+
+/**
+ * The human-review gate for one AI strategy suggestion. Mirrors ImportReview.
+ */
+model StrategySuggestionReview {
+  id                   String @id @default(cuid())
+  strategySuggestionId String @unique
+  clientId             String
+
+  status              ImportReviewStatus        @default(PENDING)
+  action              StrategySuggestionAction?
+  resultingEntityType StrategicEntityType?
+  resultingEntityId   String?
+  reviewerId          String?
+  reviewedAt          DateTime?
+  reviewNotes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  strategySuggestion StrategySuggestion @relation(fields: [strategySuggestionId], references: [id])
+
+  @@index([clientId, status])
+}
+
+/**
+ * A point-in-time snapshot of the "Strategy Setup Readiness" report — always
+ * labeled as setup readiness, never as a prediction of business success.
+ */
+model StrategyReadinessSnapshot {
+  id       String @id @default(cuid())
+  clientId String
+
+  overallScore      Int
+  sectionScores     Json
+  followUpQuestions String[]
+
+  generatedById String?
+  generatedAt   DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([clientId, generatedAt])
 }

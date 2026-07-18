@@ -28,7 +28,12 @@ export type Action =
   | "brain.edit.draft"
   | "brain.edit.active"
   | "conflict.resolve"
-  | "team.manage";
+  | "team.manage"
+  | "strategy.view"
+  | "strategy.edit"
+  | "strategy.approve"
+  | "strategy.approve.conflict"
+  | "strategy.suggest";
 
 const ALL_ACTIONS: Action[] = [
   "client.create",
@@ -44,6 +49,11 @@ const ALL_ACTIONS: Action[] = [
   "brain.edit.active",
   "conflict.resolve",
   "team.manage",
+  "strategy.view",
+  "strategy.edit",
+  "strategy.approve",
+  "strategy.approve.conflict",
+  "strategy.suggest",
 ];
 
 /**
@@ -70,10 +80,23 @@ export const ROLE_ACTIONS: Record<OrgRole | ClientRole, Action[]> = {
     "brain.edit.draft",
     "brain.edit.active",
     "conflict.resolve",
+    "strategy.view",
+    "strategy.edit",
+    "strategy.approve",
+    "strategy.approve.conflict",
+    "strategy.suggest",
   ],
-  EDITOR: ["brain.view", "brain.edit.draft", "review.approve", "source.download"],
-  VIEWER: ["brain.view", "source.download"],
-  CLIENT_APPROVER: ["brain.view", "review.approve", "review.approve.conflict", "conflict.resolve"],
+  EDITOR: ["brain.view", "brain.edit.draft", "review.approve", "source.download", "strategy.view", "strategy.edit"],
+  VIEWER: ["brain.view", "source.download", "strategy.view"],
+  CLIENT_APPROVER: [
+    "brain.view",
+    "review.approve",
+    "review.approve.conflict",
+    "conflict.resolve",
+    "strategy.view",
+    "strategy.approve",
+    "strategy.approve.conflict",
+  ],
 };
 
 /** Org roles that inherently apply to every client in the org (no ClientMember row needed). */
