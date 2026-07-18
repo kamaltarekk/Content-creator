@@ -4,6 +4,7 @@ import type { BrandType } from "@prisma/client";
 
 import { prisma } from "@/server/db/prisma";
 import { logAudit } from "@/server/services/audit.service";
+import { getCompletenessForClient } from "@/server/services/missingData.service";
 
 const ALL_BRAIN_SECTIONS = [
   "BUSINESS",
@@ -39,18 +40,17 @@ export async function listClientsForOrg(organizationId: string) {
 
   return Promise.all(
     clients.map(async (client) => {
-      const pendingReviews = await prisma.importReview.count({
-        where: { clientId: client.id, status: "PENDING" },
-      });
+      const [pendingReviews, completeness] = await Promise.all([
+        prisma.importReview.count({ where: { clientId: client.id, status: "PENDING" } }),
+        getCompletenessForClient(client.id),
+      ]);
 
       return {
         ...client,
         sourceCount: client._count.sources,
         teamMemberCount: client._count.members,
         pendingReviews,
-        // Completeness scoring lands in a later milestone (completeness.service.ts);
-        // this column is a placeholder until that's wired in.
-        completenessPercent: null as number | null,
+        completenessPercent: completeness.overall,
       };
     }),
   );

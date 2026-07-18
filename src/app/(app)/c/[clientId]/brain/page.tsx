@@ -2,11 +2,13 @@ import Link from "next/link";
 
 import { requireClientAccess, can } from "@/server/auth/permissions";
 import { listBrainItems } from "@/server/services/clientBrain.service";
+import { getCompletenessForClient } from "@/server/services/missingData.service";
 import { prisma } from "@/server/db/prisma";
 import type { BrainItemView } from "@/types/brain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ClientBrainView } from "@/components/brain/client-brain-view";
+import { CompletenessPanel } from "@/components/brain/completeness-panel";
 
 export default async function ClientBrainPage({
   params,
@@ -17,9 +19,10 @@ export default async function ClientBrainPage({
   const session = await requireClientAccess(clientId);
   const canEdit = can(session.user, "brain.edit.active", { clientId });
 
-  const [items, openConflicts] = await Promise.all([
+  const [items, openConflicts, completeness] = await Promise.all([
     listBrainItems(clientId),
     prisma.conflict.count({ where: { clientId, status: "OPEN" } }),
+    getCompletenessForClient(clientId),
   ]);
   const view: BrainItemView[] = items.map((item) => ({
     id: item.id,
@@ -60,6 +63,7 @@ export default async function ClientBrainPage({
           </Button>
         </div>
       </div>
+      <CompletenessPanel completeness={completeness} />
       <ClientBrainView clientId={clientId} items={view} canEdit={canEdit} />
     </div>
   );
