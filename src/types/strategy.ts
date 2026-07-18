@@ -4,6 +4,8 @@ import type {
   CohortPriority,
   DecisionType,
   EvidenceStrength,
+  StrategicEntityType,
+  StrategicRelationshipType,
   StrategyApprovalStatus,
   StrategyEntityStatus,
   TriggerType,
@@ -133,6 +135,22 @@ export type CohortSourceReferenceView = {
   audienceSignalNote: string | null;
   note: string | null;
   linkedAt: string;
+};
+
+export type StrategicEntityView = {
+  id: string;
+  entityType: StrategicEntityType;
+  entityId: string;
+  title: string;
+  status: string | null;
+};
+
+export type StrategicRelationshipView = {
+  id: string;
+  relationshipType: StrategicRelationshipType;
+  note: string | null;
+  fromEntity: StrategicEntityView;
+  toEntity: StrategicEntityView;
 };
 
 export type CohortVersionView = {

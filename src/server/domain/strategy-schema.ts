@@ -1,4 +1,11 @@
-import type { BeliefType, BuyingRole, DecisionType, TriggerType } from "@prisma/client";
+import type {
+  BeliefType,
+  BuyingRole,
+  DecisionType,
+  StrategicEntityType,
+  StrategicRelationshipType,
+  TriggerType,
+} from "@prisma/client";
 
 /**
  * The single source of truth for Module 2's structure: enum labels, the
@@ -66,6 +73,40 @@ export const BELIEF_TYPE_LABELS: Record<BeliefType, string> = {
   METRIC_ASSUMPTION: "Metric assumption",
   RISK_ASSUMPTION: "Risk assumption",
   OTHER: "Other",
+};
+
+export const STRATEGIC_ENTITY_TYPE_LABELS: Record<StrategicEntityType, string> = {
+  CLIENT_BRAIN_ITEM: "Client Brain item",
+  COHORT: "Cohort",
+  COMMERCIAL_SITUATION: "Commercial situation",
+  BUYING_DECISION: "Buying decision",
+  BUYING_ROLE: "Buying role",
+  BELIEF: "Belief",
+  OBJECTION: "Objection",
+  EVIDENCE: "Evidence",
+  OFFER: "Offer",
+  PROOF: "Proof",
+  CONSTRAINT: "Constraint",
+};
+
+export const STRATEGIC_RELATIONSHIP_TYPE_LABELS: Record<StrategicRelationshipType, string> = {
+  EXPERIENCES: "experiences",
+  TRIGGERED_BY: "triggered by",
+  BELIEVES: "believes",
+  CAUSED_BY: "caused by",
+  CAUSES: "causes",
+  BLOCKED_BY: "blocked by",
+  REQUIRES: "requires",
+  EVALUATES_BY: "evaluates by",
+  PARTICIPATES_IN: "participates in",
+  SUPPORTS: "supports",
+  CONTRADICTS: "contradicts",
+  REFRAMES: "reframes",
+  CHANGES_DECISION: "changes decision",
+  SERVED_BY: "served by",
+  RELEVANT_TO: "relevant to",
+  VALIDATES: "validates",
+  INVALIDATES: "invalidates",
 };
 
 /**
