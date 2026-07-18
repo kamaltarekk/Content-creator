@@ -38,12 +38,24 @@ async function buildBrainDigest(clientId: string): Promise<string> {
  */
 export async function classifySourceBlocks(
   sourceId: string,
-  provider: AIProvider = getAIProvider(),
+  providerOverride?: AIProvider,
 ): Promise<ClassificationSummary> {
   const source = await prisma.source.findUniqueOrThrow({
     where: { id: sourceId },
     include: { client: true },
   });
+
+  // Resolve the provider lazily. If it can't be constructed (e.g. no API key
+  // configured), skip classification cleanly — the source becomes
+  // NEEDS_ATTENTION rather than failing — instead of fabricating results.
+  let provider: AIProvider;
+  try {
+    provider = providerOverride ?? getAIProvider();
+  } catch (error) {
+    console.error(`[classification] provider unavailable, skipping: ${(error as Error).message}`);
+    const blockTotal = await prisma.sourceBlock.count({ where: { sourceId } });
+    return { classifiedCount: 0, skippedCount: blockTotal };
+  }
 
   const alreadyClassified = await prisma.extractedItem.findMany({
     where: { sourceId },
