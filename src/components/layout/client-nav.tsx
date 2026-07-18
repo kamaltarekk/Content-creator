@@ -11,6 +11,7 @@ const CLIENT_NAV_ITEMS = [
   { segment: "sources", label: "Source Library" },
   { segment: "brain", label: "Client Brain" },
   { segment: "reviews", label: "Import Reviews" },
+  { segment: "strategy", label: "Strategy" },
 ];
 
 export function ClientNav({

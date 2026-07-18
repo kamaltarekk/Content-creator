@@ -86,6 +86,17 @@ export const READINESS_WEIGHTS = {
 
 export type ReadinessCategory = keyof typeof READINESS_WEIGHTS;
 
+export const READINESS_CATEGORY_LABELS: Record<ReadinessCategory, string> = {
+  cohortDefinition: "Cohort definition",
+  commercialSituations: "Commercial situations",
+  triggers: "Triggers",
+  buyingDecisions: "Buying decisions",
+  buyingCommittee: "Buying committee",
+  beliefs: "Beliefs",
+  evidenceCoverage: "Evidence coverage",
+  betterDecisions: "Better decisions",
+};
+
 /** Specific (not generic) follow-up questions the readiness report can surface per category. */
 export const STRATEGY_FOLLOWUP_QUESTIONS: Record<ReadinessCategory, string> = {
   cohortDefinition:
