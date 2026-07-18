@@ -1,10 +1,16 @@
 import "server-only";
 
-import type { ChangeType, ClientBrainFieldKey, ClientBrainItem } from "@prisma/client";
+import type {
+  ChangeType,
+  ClientBrainFieldKey,
+  ClientBrainItem,
+  ConflictResolutionType,
+} from "@prisma/client";
 
 import { prisma } from "@/server/db/prisma";
 import { fieldValueType } from "@/server/domain/brain-schema";
 import { diceCoefficient } from "@/server/domain/similarity";
+import { logAudit } from "@/server/services/audit.service";
 
 /** Similarity at or above this means "the same entity instance" when grouping repeatable items. */
 export const ENTITY_MATCH_THRESHOLD = 0.75;
@@ -173,5 +179,153 @@ export function getConflictById(conflictId: string) {
       extractedItem: { include: { sourceBlock: true, source: true } },
       resolutions: true,
     },
+  });
+}
+
+export type ResolveConflictInput = {
+  conflictId: string;
+  resolutionType: ConflictResolutionType;
+  reviewerId: string;
+  organizationId: string;
+  /** For REPLACE/MERGE: the value to store; falls back to the proposed value. */
+  resolvedValueText?: string;
+  note?: string;
+};
+
+/**
+ * Resolves a conflict without ever silently overwriting approved strategy —
+ * the reviewer explicitly chooses the outcome:
+ *  - KEEP_EXISTING: discard the proposed value, restore the item to ACTIVE
+ *  - REPLACE: adopt the proposed value as a new version (with source trace)
+ *  - MERGE: store a reviewer-provided merged value as a new version
+ *  - STORE_BOTH: keep the existing value and add the proposed one as a new,
+ *    context-specific item
+ *  - MARK_UNRESOLVED: record the decision but leave the conflict open
+ */
+export async function resolveConflict(input: ResolveConflictInput) {
+  const conflict = await prisma.conflict.findUniqueOrThrow({
+    where: { id: input.conflictId },
+    include: { clientBrainItem: true, extractedItem: { include: { sourceBlock: true } } },
+  });
+  if (conflict.status !== "OPEN") {
+    throw new Error("This conflict has already been resolved.");
+  }
+
+  const existing = conflict.clientBrainItem;
+  const extracted = conflict.extractedItem;
+  const proposedValue = input.resolvedValueText?.trim() || extracted.normalizedValueText || "";
+
+  await prisma.$transaction(async (tx) => {
+    await tx.conflictResolution.create({
+      data: {
+        conflictId: conflict.id,
+        resolutionType: input.resolutionType,
+        resolvedValueText: proposedValue || null,
+        resolvedById: input.reviewerId,
+        note: input.note ?? null,
+      },
+    });
+
+    if (input.resolutionType === "MARK_UNRESOLVED") {
+      // Leave the conflict OPEN and the item DISPUTED — a deliberate defer.
+      return;
+    }
+
+    if (input.resolutionType === "KEEP_EXISTING") {
+      await tx.clientBrainItem.update({ where: { id: existing.id }, data: { status: "ACTIVE" } });
+    }
+
+    if (input.resolutionType === "REPLACE" || input.resolutionType === "MERGE") {
+      const nextVersion = existing.currentVersionNumber + 1;
+      await tx.clientBrainItem.update({
+        where: { id: existing.id },
+        data: { valueText: proposedValue, status: "ACTIVE", currentVersionNumber: nextVersion },
+      });
+      await tx.clientBrainItemVersion.create({
+        data: {
+          clientBrainItemId: existing.id,
+          versionNumber: nextVersion,
+          valueText: proposedValue,
+          status: "ACTIVE",
+          confidence: extracted.confidence,
+          changeType: "UPDATED",
+          changedById: input.reviewerId,
+          changeNote:
+            input.resolutionType === "MERGE" ? "Merged during conflict resolution" : "Replaced during conflict resolution",
+        },
+      });
+      await tx.clientBrainItemSource.create({
+        data: {
+          clientBrainItemId: existing.id,
+          sourceId: extracted.sourceId,
+          sourceBlockId: extracted.sourceBlockId,
+          extractedItemId: extracted.id,
+          approvedById: input.reviewerId,
+        },
+      });
+    }
+
+    if (input.resolutionType === "STORE_BOTH") {
+      await tx.clientBrainItem.update({ where: { id: existing.id }, data: { status: "ACTIVE" } });
+      const created = await tx.clientBrainItem.create({
+        data: {
+          clientId: conflict.clientId,
+          sectionKey: existing.sectionKey,
+          fieldKey: existing.fieldKey,
+          subjectLabel: "Context-specific (stored alongside existing)",
+          valueText: proposedValue,
+          status: "ACTIVE",
+          confidence: extracted.confidence,
+          currentVersionNumber: 1,
+          createdById: input.reviewerId,
+        },
+      });
+      await tx.clientBrainItemVersion.create({
+        data: {
+          clientBrainItemId: created.id,
+          versionNumber: 1,
+          valueText: proposedValue,
+          status: "ACTIVE",
+          confidence: extracted.confidence,
+          changeType: "ADDED",
+          changedById: input.reviewerId,
+          changeNote: "Stored as a context-specific alternative during conflict resolution",
+        },
+      });
+      await tx.clientBrainItemSource.create({
+        data: {
+          clientBrainItemId: created.id,
+          sourceId: extracted.sourceId,
+          sourceBlockId: extracted.sourceBlockId,
+          extractedItemId: extracted.id,
+          approvedById: input.reviewerId,
+        },
+      });
+    }
+
+    // Mark the conflict resolved and close out the originating review.
+    await tx.conflict.update({
+      where: { id: conflict.id },
+      data: { status: "RESOLVED", resolvedAt: new Date() },
+    });
+    await tx.importReview.updateMany({
+      where: { extractedItemId: extracted.id, status: "PENDING" },
+      data: {
+        status: "RESOLVED",
+        resolutionAction: "RESOLVE_CONFLICT",
+        reviewerId: input.reviewerId,
+        reviewedAt: new Date(),
+      },
+    });
+  });
+
+  await logAudit({
+    organizationId: input.organizationId,
+    clientId: conflict.clientId,
+    actorUserId: input.reviewerId,
+    action: "CONFLICT_RESOLVE",
+    entityType: "Conflict",
+    entityId: conflict.id,
+    metadata: { resolutionType: input.resolutionType },
   });
 }

@@ -2,7 +2,9 @@ import Link from "next/link";
 
 import { requireClientAccess, can } from "@/server/auth/permissions";
 import { listBrainItems } from "@/server/services/clientBrain.service";
+import { prisma } from "@/server/db/prisma";
 import type { BrainItemView } from "@/types/brain";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ClientBrainView } from "@/components/brain/client-brain-view";
 
@@ -15,7 +17,10 @@ export default async function ClientBrainPage({
   const session = await requireClientAccess(clientId);
   const canEdit = can(session.user, "brain.edit.active", { clientId });
 
-  const items = await listBrainItems(clientId);
+  const [items, openConflicts] = await Promise.all([
+    listBrainItems(clientId),
+    prisma.conflict.count({ where: { clientId, status: "OPEN" } }),
+  ]);
   const view: BrainItemView[] = items.map((item) => ({
     id: item.id,
     sectionKey: item.sectionKey,
@@ -40,6 +45,16 @@ export default async function ClientBrainPage({
           <h1 className="text-2xl font-semibold text-foreground">Approved strategic knowledge</h1>
         </div>
         <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/c/${clientId}/brain/conflicts`}>
+              Conflicts
+              {openConflicts > 0 && (
+                <Badge variant="warning" className="ml-1.5">
+                  {openConflicts}
+                </Badge>
+              )}
+            </Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href={`/c/${clientId}/brain/missing-data`}>Missing data report</Link>
           </Button>
