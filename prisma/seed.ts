@@ -82,6 +82,25 @@ async function main() {
     await prisma.clientBrainItem.deleteMany({ where: { clientId } });
     await prisma.clientBrainSection.deleteMany({ where: { clientId } });
     await prisma.importReview.deleteMany({ where: { clientId } });
+
+    // --- Module 2: strategy layer (FK-safe order) ---
+    await prisma.strategySuggestionReview.deleteMany({ where: { clientId } });
+    await prisma.strategySuggestion.deleteMany({ where: { clientId } });
+    await prisma.strategicRelationship.deleteMany({ where: { clientId } });
+    await prisma.strategicEntity.deleteMany({ where: { clientId } });
+    await prisma.evidenceLink.deleteMany({ where: { clientId } });
+    await prisma.beliefMapVersion.deleteMany({ where: { beliefMap: { clientId } } });
+    await prisma.beliefMap.deleteMany({ where: { clientId } });
+    await prisma.decisionCriterion.deleteMany({ where: { clientId } });
+    await prisma.objection.deleteMany({ where: { clientId } });
+    await prisma.buyingRoleParticipant.deleteMany({ where: { clientId } });
+    await prisma.buyingDecisionVersion.deleteMany({ where: { buyingDecision: { clientId } } });
+    await prisma.buyingDecision.deleteMany({ where: { clientId } });
+    await prisma.commercialSituationVersion.deleteMany({ where: { commercialSituation: { clientId } } });
+    await prisma.commercialSituation.deleteMany({ where: { clientId } });
+    await prisma.cohortSourceReference.deleteMany({ where: { cohort: { clientId } } });
+    await prisma.cohortVersion.deleteMany({ where: { cohort: { clientId } } });
+    await prisma.cohort.deleteMany({ where: { clientId } });
     const sources = await prisma.source.findMany({ where: { clientId }, select: { id: true } });
     const sourceIds = sources.map((s) => s.id);
     await prisma.extractedItem.deleteMany({ where: { sourceId: { in: sourceIds } } });
@@ -501,8 +520,488 @@ async function main() {
     },
   });
 
+  // =========================================================================
+  // MODULE 2 — Cohort + Buying Decision + Belief Intelligence
+  // =========================================================================
+
+  // --- The primary cohort, fully worked through the reasoning chain ---
+  const mainCohort = await prisma.cohort.create({
+    data: {
+      clientId: client.id,
+      name: "Marketing managers blamed for weak sales conversion",
+      definition:
+        "Mid-size B2B marketing managers who get blamed by the CEO when sales conversion drops, even though the funnel gap is downstream of marketing's control.",
+      priority: "HIGH",
+      role: "Marketing Manager",
+      commercialContext: "Under pressure to prove marketing's commercial impact after a weak quarter.",
+      currentWorkflow: "Runs paid campaigns and reports MQLs and ROAS monthly to the CEO.",
+      currentBelief: "If ROAS is high, marketing is working.",
+      desiredOutcome: "Prove marketing's commercial impact to a skeptical CEO.",
+      decisionRisk: "Budget could be cut if next quarter doesn't show commercial results, not just marketing metrics.",
+      emotionalDrivers: ["fear of blame", "desire for credibility"],
+      platformPresence: ["LinkedIn", "Email"],
+      attentionNotes: "Reads LinkedIn thought-leadership content from CFOs and revenue leaders.",
+      status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.cohortVersion.create({
+    data: {
+      cohortId: mainCohort.id,
+      name: mainCohort.name,
+      definition: mainCohort.definition,
+      priority: mainCohort.priority,
+      role: mainCohort.role,
+      commercialContext: mainCohort.commercialContext,
+      currentWorkflow: mainCohort.currentWorkflow,
+      currentBelief: mainCohort.currentBelief,
+      desiredOutcome: mainCohort.desiredOutcome,
+      decisionRisk: mainCohort.decisionRisk,
+      emotionalDrivers: mainCohort.emotionalDrivers,
+      platformPresence: mainCohort.platformPresence,
+      attentionNotes: mainCohort.attentionNotes,
+      status: mainCohort.status,
+      approvalStatus: mainCohort.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+    },
+  });
+  await prisma.cohortSourceReference.create({
+    data: {
+      cohortId: mainCohort.id,
+      relationshipType: "STRONG_SIGNAL",
+      audienceSignalNote: "Managers scale ROAS but the CEO still doesn't see the company making more money.",
+      note: "Grounded in the customer message audience signal from the SPB framework upload.",
+      linkedById: strategist.id,
+    },
+  });
+
+  const mainSituation = await prisma.commercialSituation.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      title: "CEO blames marketing after a weak sales quarter",
+      triggerType: "PERFORMANCE_CHANGE",
+      triggerDescription: "Sales conversion dropped 15% quarter-on-quarter despite marketing hitting its lead targets.",
+      activeProblem: "Marketing is blamed for weak sales conversion even though the gap is in the sales handoff.",
+      currentWorkflow: "Marketing keeps increasing ad spend on top-of-funnel campaigns instead of auditing the handoff.",
+      urgencyNote: "Must show a different commercial story before the next board meeting.",
+      status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.commercialSituationVersion.create({
+    data: {
+      commercialSituationId: mainSituation.id,
+      title: mainSituation.title,
+      triggerType: mainSituation.triggerType,
+      triggerDescription: mainSituation.triggerDescription,
+      activeProblem: mainSituation.activeProblem,
+      currentWorkflow: mainSituation.currentWorkflow,
+      urgencyNote: mainSituation.urgencyNote,
+      status: mainSituation.status,
+      approvalStatus: mainSituation.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+    },
+  });
+
+  const mainDecision = await prisma.buyingDecision.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      commercialSituationId: mainSituation.id,
+      title: "Approve a new marketing measurement and accountability approach",
+      decisionType: "INTERNAL_ALIGNMENT",
+      description: "Whether to change how marketing's contribution is measured and reported to leadership.",
+      timeframe: "This quarter",
+      status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.buyingDecisionVersion.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      title: mainDecision.title,
+      decisionType: mainDecision.decisionType,
+      description: mainDecision.description,
+      timeframe: mainDecision.timeframe,
+      status: mainDecision.status,
+      approvalStatus: mainDecision.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+    },
+  });
+
+  const ceoParticipant = await prisma.buyingRoleParticipant.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      role: "DECISION_MAKER",
+      label: "CEO",
+      influenceScore: 5,
+      stance: "supportive of change if it's proven commercially",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.buyingRoleParticipant.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      role: "CHAMPION",
+      label: "Marketing Manager",
+      influenceScore: 3,
+      stance: "champion and primary user of the new approach",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.buyingRoleParticipant.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      role: "INFLUENCER",
+      label: "Sales Manager",
+      influenceScore: 4,
+      stance: "possible blocker — defensive about the handoff issue",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.buyingRoleParticipant.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      role: "EVALUATOR",
+      label: "Finance Manager",
+      influenceScore: 3,
+      stance: "payer influence — evaluates budget impact",
+      createdById: strategist.id,
+    },
+  });
+
+  await prisma.decisionCriterion.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      label: "Shows commercial impact, not just marketing metrics",
+      importance: "CRITICAL",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.decisionCriterion.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      label: "Can be implemented without new tooling",
+      importance: "MEDIUM",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.decisionCriterion.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      label: "Sales team buy-in",
+      importance: "HIGH",
+      createdById: strategist.id,
+    },
+  });
+
+  await prisma.objection.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      title: "Sales will resist being measured on handoff speed",
+      raisedByRole: "INFLUENCER",
+      severity: "HIGH",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.objection.create({
+    data: {
+      buyingDecisionId: mainDecision.id,
+      clientId: client.id,
+      title: "Finance is worried about attribution complexity",
+      raisedByRole: "EVALUATOR",
+      severity: "MEDIUM",
+      resolutionNote: "Addressed with a simplified quarterly review instead of full multi-touch attribution.",
+      status: "ARCHIVED",
+      createdById: strategist.id,
+    },
+  });
+
+  // --- The approved belief map, with strong evidence ---
+  const approvedBelief = await prisma.beliefMap.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      commercialSituationId: mainSituation.id,
+      observedSituation: "Sales conversion dropped while marketing hit its lead targets.",
+      currentInterpretation: "Leadership assumes marketing failed because the topline conversion number is down.",
+      currentBeliefStatement: "High ROAS means marketing success.",
+      beliefType: "WRONG",
+      behaviorCaused: "Marketing keeps increasing ad spend on top-of-funnel campaigns instead of fixing the sales handoff.",
+      commercialConsequence: "CAC keeps rising while conversion stays flat, and marketing takes the blame for a sales-side problem.",
+      betterBeliefStatement:
+        "Marketing efficiency must be evaluated inside the complete commercial model, including what happens after the lead is handed to sales.",
+      betterCommercialDecision:
+        "Redirect part of the ad budget into a lead-handoff audit and a joint marketing/sales conversion review.",
+      relevantOfferPlaceholder: "CEO Marketing Decision Session",
+      approvalStatus: "APPROVED",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.beliefMapVersion.create({
+    data: {
+      beliefMapId: approvedBelief.id,
+      observedSituation: approvedBelief.observedSituation,
+      currentInterpretation: approvedBelief.currentInterpretation,
+      currentBeliefStatement: approvedBelief.currentBeliefStatement,
+      beliefType: approvedBelief.beliefType,
+      behaviorCaused: approvedBelief.behaviorCaused,
+      commercialConsequence: approvedBelief.commercialConsequence,
+      betterBeliefStatement: approvedBelief.betterBeliefStatement,
+      betterCommercialDecision: approvedBelief.betterCommercialDecision,
+      relevantOfferPlaceholder: approvedBelief.relevantOfferPlaceholder,
+      approvalStatus: approvedBelief.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+    },
+  });
+  await prisma.evidenceLink.create({
+    data: {
+      clientId: client.id,
+      targetEntityType: "BELIEF",
+      targetEntityId: approvedBelief.id,
+      beliefMapId: approvedBelief.id,
+      description: "A client increased contribution profit by 22% after cutting a high-ROAS but poor-lead-quality campaign.",
+      evidenceStrength: "STRONG",
+      note: "See the PROOF/RESULT item in the Client Brain for the same result.",
+      createdById: strategist.id,
+    },
+  });
+
+  // --- A weak belief map: a trivial antonym-swap reframe, no evidence, still a draft ---
+  const weakBelief = await prisma.beliefMap.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      currentBeliefStatement: "Marketing is difficult.",
+      beliefType: "LIMITING",
+      betterBeliefStatement: "Marketing can be easy.",
+      approvalStatus: "DRAFT",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.beliefMapVersion.create({
+    data: {
+      beliefMapId: weakBelief.id,
+      currentBeliefStatement: weakBelief.currentBeliefStatement,
+      beliefType: weakBelief.beliefType,
+      betterBeliefStatement: weakBelief.betterBeliefStatement,
+      approvalStatus: weakBelief.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+      changeNote: "Seeded as a deliberately weak example — a trivial antonym swap, not a real reframe.",
+    },
+  });
+
+  // --- A belief with missing evidence: well-developed, but nothing links it to proof yet ---
+  const missingEvidenceBelief = await prisma.beliefMap.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      currentBeliefStatement: "More leads will fix our weak sales conversion rate.",
+      beliefType: "INCOMPLETE",
+      behaviorCaused: "Keeps increasing top-of-funnel ad spend instead of investigating the handoff.",
+      commercialConsequence: "CAC rises without a proportional revenue gain.",
+      betterBeliefStatement: "The conversion problem lives in the sales handoff, not in lead volume.",
+      betterCommercialDecision: "Redirect budget from lead generation into a handoff-speed pilot program.",
+      approvalStatus: "UNDER_REVIEW",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.beliefMapVersion.create({
+    data: {
+      beliefMapId: missingEvidenceBelief.id,
+      currentBeliefStatement: missingEvidenceBelief.currentBeliefStatement,
+      beliefType: missingEvidenceBelief.beliefType,
+      behaviorCaused: missingEvidenceBelief.behaviorCaused,
+      commercialConsequence: missingEvidenceBelief.commercialConsequence,
+      betterBeliefStatement: missingEvidenceBelief.betterBeliefStatement,
+      betterCommercialDecision: missingEvidenceBelief.betterCommercialDecision,
+      approvalStatus: missingEvidenceBelief.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+      changeNote: "Seeded to demonstrate the 'missing evidence' state — otherwise well-developed.",
+    },
+  });
+
+  // --- Strategic Relationship Graph reference rows + a couple of connections ---
+  const cohortEntity = await prisma.strategicEntity.create({
+    data: { clientId: client.id, entityType: "COHORT", entityId: mainCohort.id, title: mainCohort.name, status: mainCohort.approvalStatus },
+  });
+  const situationEntity = await prisma.strategicEntity.create({
+    data: {
+      clientId: client.id,
+      entityType: "COMMERCIAL_SITUATION",
+      entityId: mainSituation.id,
+      title: mainSituation.title,
+      status: mainSituation.approvalStatus,
+    },
+  });
+  const decisionEntity = await prisma.strategicEntity.create({
+    data: {
+      clientId: client.id,
+      entityType: "BUYING_DECISION",
+      entityId: mainDecision.id,
+      title: mainDecision.title,
+      status: mainDecision.approvalStatus,
+    },
+  });
+  const beliefEntity = await prisma.strategicEntity.create({
+    data: {
+      clientId: client.id,
+      entityType: "BELIEF",
+      entityId: approvedBelief.id,
+      title: approvedBelief.currentBeliefStatement,
+      status: approvedBelief.approvalStatus,
+    },
+  });
+  await prisma.strategicRelationship.create({
+    data: {
+      clientId: client.id,
+      fromEntityId: cohortEntity.id,
+      toEntityId: situationEntity.id,
+      relationshipType: "EXPERIENCES",
+      createdById: strategist.id,
+    },
+  });
+  await prisma.strategicRelationship.create({
+    data: {
+      clientId: client.id,
+      fromEntityId: beliefEntity.id,
+      toEntityId: decisionEntity.id,
+      relationshipType: "CHANGES_DECISION",
+      note: "Reframing this belief is what unlocks the buying decision.",
+      createdById: strategist.id,
+    },
+  });
+
+  // --- AI Suggestion Review Queue examples ---
+
+  // 1. A plausible, well-grounded AI-suggested cohort.
+  const aiSuggestedCohort = await prisma.strategySuggestion.create({
+    data: {
+      clientId: client.id,
+      suggestionType: "COHORT",
+      title: "Solo consultants overwhelmed by inconsistent lead flow",
+      proposedFields: {
+        name: "Solo consultants overwhelmed by inconsistent lead flow",
+        priority: "MEDIUM",
+        definition: "Independent consultants whose pipeline swings between feast and famine, making revenue hard to plan.",
+      },
+      sourceReferences: [{ source_type: "AUDIENCE_SIGNAL", reference_id: "audience-signal-lead-flow" }],
+      confidence: 0.68,
+      reasoningSummary: "Grounded in a recurring audience-signal pattern about inconsistent lead flow.",
+      missingEvidence: ["A quantified example of the lead-flow inconsistency"],
+      possibleConflicts: [],
+      suggestedRelationships: [],
+      status: "AI_SUGGESTED",
+      isDuplicateCandidate: false,
+      aiModel: "seed",
+    },
+  });
+  await prisma.strategySuggestionReview.create({
+    data: { strategySuggestionId: aiSuggestedCohort.id, clientId: client.id, status: "PENDING" },
+  });
+
+  // 2. A duplicate cohort candidate — very similar to the main cohort.
+  const duplicateCohortSuggestion = await prisma.strategySuggestion.create({
+    data: {
+      clientId: client.id,
+      suggestionType: "COHORT",
+      title: "Marketing managers blamed for poor sales results",
+      proposedFields: {
+        name: "Marketing managers blamed for poor sales results",
+        priority: "HIGH",
+        definition: "Marketing managers under pressure when sales results are weak.",
+      },
+      sourceReferences: [{ source_type: "CLIENT_BRAIN_ITEM", reference_id: "cohort-name-item" }],
+      confidence: 0.75,
+      reasoningSummary: "Grounded in the same positioning material as the existing cohort.",
+      missingEvidence: [],
+      possibleConflicts: [
+        {
+          existing_entity_type: "COHORT",
+          existing_entity_id: mainCohort.id,
+          reason: "Very similar cohort name and situation already exists in the Cohort Lab.",
+        },
+      ],
+      suggestedRelationships: [],
+      status: "AI_SUGGESTED",
+      isDuplicateCandidate: true,
+      duplicateOfEntityType: "COHORT",
+      duplicateOfEntityId: mainCohort.id,
+      aiModel: "seed",
+    },
+  });
+  await prisma.strategySuggestionReview.create({
+    data: { strategySuggestionId: duplicateCohortSuggestion.id, clientId: client.id, status: "PENDING" },
+  });
+
+  // 3. A conflicting buying-role suggestion — proposes a second decision-maker where one is already recorded.
+  const conflictingRoleSuggestion = await prisma.strategySuggestion.create({
+    data: {
+      clientId: client.id,
+      suggestionType: "BUYING_ROLE_PARTICIPANT",
+      title: "Add Sales Manager as a decision maker on the measurement approach",
+      proposedFields: {
+        buyingDecisionId: mainDecision.id,
+        role: "DECISION_MAKER",
+        label: "Sales Manager",
+        influenceScore: 4,
+      },
+      sourceReferences: [{ source_type: "MANUAL", reference_id: "manual-note-1", note: "Inferred from a meeting note" }],
+      confidence: 0.55,
+      reasoningSummary: "The Sales Manager's pushback suggests they may hold real decision authority here.",
+      missingEvidence: ["Direct confirmation the Sales Manager can veto or approve this decision"],
+      possibleConflicts: [
+        {
+          existing_entity_type: "BUYING_ROLE",
+          existing_entity_id: ceoParticipant.id,
+          reason: "The CEO is already recorded as the sole decision maker for this buying decision.",
+        },
+      ],
+      suggestedRelationships: [],
+      status: "AI_SUGGESTED",
+      isDuplicateCandidate: true,
+      aiModel: "seed",
+    },
+  });
+  await prisma.strategySuggestionReview.create({
+    data: { strategySuggestionId: conflictingRoleSuggestion.id, clientId: client.id, status: "PENDING" },
+  });
+
   const pendingCount = await prisma.importReview.count({ where: { clientId: client.id, status: "PENDING" } });
   const brainCount = await prisma.clientBrainItem.count({ where: { clientId: client.id } });
+  const cohortCount = await prisma.cohort.count({ where: { clientId: client.id } });
+  const beliefCount = await prisma.beliefMap.count({ where: { clientId: client.id } });
+  const suggestionCount = await prisma.strategySuggestion.count({ where: { clientId: client.id, status: "AI_SUGGESTED" } });
 
   console.log("Seed complete:");
   console.log(`  Organization: ${org.slug}`);
@@ -511,6 +1010,9 @@ async function main() {
   console.log(`  Client Brain items: ${brainCount}`);
   console.log(`  Pending reviews: ${pendingCount}`);
   console.log(`  Open conflicts: 1 (OFFERS/PRICE — 45,000 vs 30,000 EGP)`);
+  console.log(`  Strategy cohorts: ${cohortCount}`);
+  console.log(`  Belief maps: ${beliefCount}`);
+  console.log(`  Pending AI strategy suggestions: ${suggestionCount}`);
 }
 
 main()
