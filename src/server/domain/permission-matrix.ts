@@ -21,6 +21,7 @@ export type Action =
   | "client.archive"
   | "source.upload"
   | "source.download"
+  | "source.delete"
   | "review.approve"
   | "review.approve.conflict"
   | "brain.view"
@@ -35,6 +36,7 @@ const ALL_ACTIONS: Action[] = [
   "client.archive",
   "source.upload",
   "source.download",
+  "source.delete",
   "review.approve",
   "review.approve.conflict",
   "brain.view",
@@ -61,6 +63,7 @@ export const ROLE_ACTIONS: Record<OrgRole | ClientRole, Action[]> = {
     "client.edit",
     "source.upload",
     "source.download",
+    "source.delete",
     "review.approve",
     "review.approve.conflict",
     "brain.view",

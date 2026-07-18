@@ -202,4 +202,28 @@ export async function uploadSource(input: UploadSourceInput) {
   return { source, isDuplicate: Boolean(duplicate), duplicateOfSourceId: duplicate?.id ?? null };
 }
 
+/**
+ * Soft-deletes a source: flips isDeleted so it drops out of the library and
+ * search, but never removes the stored original file or the row (spec section
+ * 18 — originals are never hard-deleted by default). Records an audit entry.
+ */
+export async function softDeleteSource(params: { sourceId: string; organizationId: string; userId: string }) {
+  const source = await prisma.source.update({
+    where: { id: params.sourceId },
+    data: { isDeleted: true, deletedAt: new Date() },
+  });
+
+  await logAudit({
+    organizationId: params.organizationId,
+    clientId: source.clientId,
+    actorUserId: params.userId,
+    action: "SOFT_DELETE",
+    entityType: "Source",
+    entityId: source.id,
+    metadata: { fileName: source.fileName },
+  });
+
+  return source;
+}
+
 export { parseTagList };

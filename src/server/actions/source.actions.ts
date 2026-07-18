@@ -1,10 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { requireAction } from "@/server/auth/permissions";
+import { prisma } from "@/server/db/prisma";
 import { uploadMetadataSchema, parseTagList } from "@/server/domain/source-schema";
-import { uploadSource, UploadValidationError } from "@/server/services/source.service";
+import { uploadSource, softDeleteSource, UploadValidationError } from "@/server/services/source.service";
 import { ensureJobRunnerStarted } from "@/server/jobs/local.job.runner";
 
 export type UploadSourceState = {
@@ -69,4 +71,16 @@ export async function uploadSourceAction(
   ensureJobRunnerStarted();
 
   redirect(`/c/${clientId}/sources/${sourceId}`);
+}
+
+export async function softDeleteSourceAction(sourceId: string) {
+  const source = await prisma.source.findUniqueOrThrow({
+    where: { id: sourceId },
+    select: { clientId: true },
+  });
+  const session = await requireAction("source.delete", { clientId: source.clientId });
+  if (!session.user.orgId) throw new Error("No organization on account.");
+
+  await softDeleteSource({ sourceId, organizationId: session.user.orgId, userId: session.user.id });
+  revalidatePath(`/c/${source.clientId}/sources`);
 }

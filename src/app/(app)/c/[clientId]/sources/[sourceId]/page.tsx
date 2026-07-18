@@ -10,13 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SourceStatusPoller } from "@/components/sources/source-status-poller";
+import { DeleteSourceButton } from "@/components/sources/delete-source-button";
 
 export default async function SourceDetailPage({
   params,
 }: {
   params: Promise<{ clientId: string; sourceId: string }>;
 }) {
-  const { sourceId } = await params;
+  const { clientId, sourceId } = await params;
   const source = await getSourceById(sourceId);
   if (!source) notFound();
 
@@ -32,12 +33,15 @@ export default async function SourceDetailPage({
           </p>
           <h1 className="text-2xl font-semibold text-foreground">{source.fileName}</h1>
         </div>
-        <Button asChild variant="outline">
-          <a href={`/api/sources/${source.id}/download`}>
-            <Download className="size-4" />
-            Download original
-          </a>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild variant="outline">
+            <a href={`/api/sources/${source.id}/download`}>
+              <Download className="size-4" />
+              Download original
+            </a>
+          </Button>
+          <DeleteSourceButton sourceId={source.id} clientId={clientId} />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
