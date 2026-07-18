@@ -92,8 +92,8 @@ test("full import-to-brain journey", async ({ page }) => {
   await page.waitForURL("**/brain/conflicts", { timeout: 15_000 });
   await expect(page.getByText("No open conflicts")).toBeVisible();
 
-  // --- Open the Client Brain and verify source traceability. ---
-  await page.goto(`/c/${clientId}/brain`);
+  // --- Open the Client Brain (Expert Mode) and verify source traceability. ---
+  await page.goto(`/c/${clientId}/brain/expert`);
   await page.waitForLoadState("networkidle");
   await expect(page.getByText(/setup-completeness indicator/i)).toBeVisible();
   await page.getByRole("button", { name: "Positioning" }).click();

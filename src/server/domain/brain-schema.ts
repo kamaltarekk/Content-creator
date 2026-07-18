@@ -92,6 +92,29 @@ export const SECTION_LABELS: Record<ClientBrainSectionKey, string> = {
   LEARNINGS: "Client-Specific Learnings",
 };
 
+/**
+ * Beginner-facing renames for Guided Mode (spec: "Cohorts"→"Audiences",
+ * "Beliefs"→"What do they currently think?"). Internal model/enum names never
+ * change — this is a display-only overlay used by the Guided Client Brain
+ * overview; Expert Mode keeps using SECTION_LABELS unchanged.
+ */
+export const PLAIN_LANGUAGE_SECTION_LABELS: Partial<Record<ClientBrainSectionKey, string>> = {
+  BUSINESS: "The Business",
+  POSITIONING: "How you're positioned",
+  MARKETS: "Markets",
+  COHORTS: "Audiences",
+  BELIEFS: "What do they currently think?",
+  VOICE: "Voice",
+  OFFERS: "Offers",
+  PROOF: "Proof",
+  COMMERCIAL_OBJECTIVES: "Goals",
+  CONSTRAINTS: "Constraints",
+};
+
+export function plainLanguageSectionLabel(section: ClientBrainSectionKey): string {
+  return PLAIN_LANGUAGE_SECTION_LABELS[section] ?? SECTION_LABELS[section];
+}
+
 export const FIELD_LABELS: Record<ClientBrainFieldKey, string> = {
   BUSINESS_MODEL: "Business model",
   PRODUCTS_SERVICES: "Products / services",
