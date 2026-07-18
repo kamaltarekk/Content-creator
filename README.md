@@ -104,6 +104,7 @@ Open http://localhost:3000 and sign in with a seeded account:
 | `DATABASE_URL` | Postgres connection string |
 | `AUTH_SECRET` | Auth.js JWT secret (`openssl rand -base64 32`) |
 | `AUTH_URL` | Base URL for Auth.js callbacks (`http://localhost:3000`) |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` | Google OAuth Client ID/secret. **Optional** — without both set, the provider isn't registered and the "Continue with Google" button doesn't render. Google can only sign in an email that already has a `User` row (seed or a future invite flow); there's no self-serve signup. Redirect URI: `<AUTH_URL>/api/auth/callback/google`. |
 | `OPENAI_API_KEY` | Enables AI classification. **Optional** — without it, uploads are parsed and stored but classification is skipped (sources land in `NEEDS_ATTENTION`); it never fabricates results. |
 | `OPENAI_MODEL` | Model id (default `gpt-4.1-mini`) |
 | `STORAGE_LOCAL_ROOT` | Where original files are stored (default `.data/uploads`) |

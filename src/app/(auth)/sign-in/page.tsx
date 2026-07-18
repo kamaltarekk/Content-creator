@@ -1,7 +1,11 @@
+import { Suspense } from "react";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SignInForm } from "@/components/auth/sign-in-form";
 
 export default function SignInPage() {
+  const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
+
   return (
     <Card>
       <CardHeader>
@@ -12,7 +16,9 @@ export default function SignInPage() {
         <CardDescription>Access your client workspaces.</CardDescription>
       </CardHeader>
       <CardContent>
-        <SignInForm />
+        <Suspense fallback={null}>
+          <SignInForm googleEnabled={googleEnabled} />
+        </Suspense>
       </CardContent>
     </Card>
   );

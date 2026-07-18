@@ -27,3 +27,7 @@ export async function signInAction(_prevState: SignInState, formData: FormData):
     throw error;
   }
 }
+
+export async function signInWithGoogleAction() {
+  await signIn("google", { redirectTo: "/overview" });
+}
