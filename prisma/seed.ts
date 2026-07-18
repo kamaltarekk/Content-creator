@@ -10,6 +10,11 @@ import {
 } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+// Pure domain modules only (no "server-only" services) — safe to import into a plain tsx script.
+import { ScriptGenerationContextSchema, type ScriptGenerationContext } from "../src/server/domain/script-generation-context";
+import { ReelScriptPackageSchema, type ReelScriptPackage } from "../src/server/domain/reel-script-package";
+import { computeReelValidation, isReadyToMarkReady, summarizeGatesForPackage } from "../src/server/domain/reel-validation";
+
 const prisma = new PrismaClient();
 
 const STORAGE_ROOT = resolve(process.cwd(), process.env.STORAGE_LOCAL_ROOT || ".data/uploads");
@@ -102,6 +107,18 @@ async function main() {
     await prisma.cohortSourceReference.deleteMany({ where: { cohort: { clientId } } });
     await prisma.cohortVersion.deleteMany({ where: { cohort: { clientId } } });
     await prisma.cohort.deleteMany({ where: { clientId } });
+
+    // --- Module 3: guided setup, offer/proof, script intelligence, and Reels (FK-safe order) ---
+    await prisma.reelVersion.deleteMany({ where: { reelGeneration: { clientId } } });
+    await prisma.reelGeneration.deleteMany({ where: { clientId } });
+    await prisma.scriptContextSnapshot.deleteMany({ where: { clientId } });
+    await prisma.guidedSetupAnswer.deleteMany({ where: { clientId } });
+    await prisma.guidedSetupSession.deleteMany({ where: { clientId } });
+    await prisma.scriptIntelligenceField.deleteMany({ where: { clientId } });
+    await prisma.proofItem.deleteMany({ where: { clientId } });
+    await prisma.offerVersion.deleteMany({ where: { offer: { clientId } } });
+    await prisma.offer.deleteMany({ where: { clientId } });
+
     const sources = await prisma.source.findMany({ where: { clientId }, select: { id: true } });
     const sourceIds = sources.map((s) => s.id);
     await prisma.extractedItem.deleteMany({ where: { sourceId: { in: sourceIds } } });
@@ -998,6 +1015,513 @@ async function main() {
     data: { strategySuggestionId: conflictingRoleSuggestion.id, clientId: client.id, status: "PENDING" },
   });
 
+  // =========================================================================
+  // MODULE 3 — Guided Client Setup + Script Intelligence Compiler + First Reel
+  // =========================================================================
+
+  // --- Two more approved Client Brain items Module 3 needs (business + a real prohibited claim) ---
+  const whatTheySellItem = await prisma.clientBrainItem.create({
+    data: {
+      clientId: client.id,
+      sectionKey: "BUSINESS",
+      fieldKey: "PRODUCTS_SERVICES",
+      valueText: "A single paid marketing-decision consulting session for CEOs and marketing leaders — not ongoing agency services.",
+      status: "ACTIVE",
+      confidence: 1,
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.clientBrainItemVersion.create({
+    data: {
+      clientBrainItemId: whatTheySellItem.id,
+      versionNumber: 1,
+      valueText: whatTheySellItem.valueText,
+      status: "ACTIVE",
+      confidence: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+      changeNote: "Seeded",
+    },
+  });
+
+  const prohibitedClaimItem = await prisma.clientBrainItem.create({
+    data: {
+      clientId: client.id,
+      sectionKey: "PROHIBITED_CLAIMS",
+      fieldKey: "CLAIM",
+      valueText: "Guaranteed revenue growth",
+      status: "ACTIVE",
+      confidence: 1,
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.clientBrainItemVersion.create({
+    data: {
+      clientBrainItemId: prohibitedClaimItem.id,
+      versionNumber: 1,
+      valueText: prohibitedClaimItem.valueText,
+      status: "ACTIVE",
+      confidence: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+      changeNote: "Seeded",
+    },
+  });
+  const prohibitedClaimReasonItem = await prisma.clientBrainItem.create({
+    data: {
+      clientId: client.id,
+      sectionKey: "PROHIBITED_CLAIMS",
+      fieldKey: "REASON",
+      valueText: "Kamal's offer is a decision-making session, not a performance guarantee — no result can be promised in advance.",
+      status: "ACTIVE",
+      confidence: 1,
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.clientBrainItemVersion.create({
+    data: {
+      clientBrainItemId: prohibitedClaimReasonItem.id,
+      versionNumber: 1,
+      valueText: prohibitedClaimReasonItem.valueText,
+      status: "ACTIVE",
+      confidence: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+      changeNote: "Seeded",
+    },
+  });
+
+  // --- The Offer + Proof precursor entities (spec section 34) ---
+  const offer = await prisma.offer.create({
+    data: {
+      clientId: client.id,
+      name: "CEO Marketing Decision Session",
+      forWhom: mainCohort.name,
+      problemAddressed: mainSituation.activeProblem,
+      corePromise: "A single session that reframes one marketing decision into a commercial one.",
+      intendedOutcome: "A clear, board-ready commercial decision instead of another ROAS report.",
+      mechanism: "A structured 90-minute session walking through the belief-to-decision chain with evidence.",
+      deliverables: ["A recorded session", "A one-page commercial decision brief"],
+      pricePresentation: "EXACT_PRICE",
+      priceText: "30,000 EGP",
+      guarantee: null,
+      ctaRoute: "Book a CEO Marketing Decision Session.",
+      status: "ACTIVE",
+      approvalStatus: "APPROVED",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.offerVersion.create({
+    data: {
+      offerId: offer.id,
+      name: offer.name,
+      forWhom: offer.forWhom,
+      problemAddressed: offer.problemAddressed,
+      corePromise: offer.corePromise,
+      intendedOutcome: offer.intendedOutcome,
+      mechanism: offer.mechanism,
+      deliverables: offer.deliverables,
+      pricePresentation: offer.pricePresentation,
+      priceText: offer.priceText,
+      excludedOutcomes: offer.excludedOutcomes,
+      guarantee: offer.guarantee,
+      ctaRoute: offer.ctaRoute,
+      status: offer.status,
+      approvalStatus: offer.approvalStatus,
+      versionNumber: 1,
+      changeType: "ADDED",
+      changedById: strategist.id,
+    },
+  });
+
+  const proofItem = await prisma.proofItem.create({
+    data: {
+      clientId: client.id,
+      offerId: offer.id,
+      proofType: "RESULT",
+      whatHappened: "A client increased contribution profit by 22% after cutting a high-ROAS but poor-lead-quality campaign.",
+      whoForWhom: "A marketing manager at a mid-size B2B company",
+      startingPoint: "Scaling a high-ROAS campaign with poor lead quality",
+      whatChanged: "Contribution profit",
+      overPeriod: "One quarter",
+      contributingFactors: "Cutting the campaign and reallocating budget toward a lead-quality and handoff review",
+      limitations: ["A single client result, not independently audited"],
+      publicUseStatus: "PUBLIC",
+      evidenceStrength: "STRONG",
+      needsReview: false,
+      approvalStatus: "APPROVED",
+      createdById: strategist.id,
+    },
+  });
+
+  // --- Script Intelligence Fields: facts with no existing normalized home ---
+  const contentObjectiveField = await prisma.scriptIntelligenceField.create({
+    data: {
+      clientId: client.id,
+      sourceEntityType: "GuidedSetupAnswer",
+      sourceEntityId: "seed",
+      fieldKey: "content_objective",
+      normalizedValue: "BELIEF_CHANGE",
+      scriptImpacts: ["ANGLE", "CTA", "BODY"],
+      approvalStatus: "APPROVED",
+      confidence: 0.95,
+    },
+  });
+  const voiceTechnicalityField = await prisma.scriptIntelligenceField.create({
+    data: {
+      clientId: client.id,
+      sourceEntityType: "GuidedSetupAnswer",
+      sourceEntityId: "seed",
+      fieldKey: "voice_technicality",
+      normalizedValue: "SIMPLE_WITH_BUSINESS_TERMS",
+      scriptImpacts: ["VOICE"],
+      approvalStatus: "APPROVED",
+      confidence: 0.9,
+    },
+  });
+  const voiceGoodExampleField = await prisma.scriptIntelligenceField.create({
+    data: {
+      clientId: client.id,
+      sourceEntityType: "GuidedSetupAnswer",
+      sourceEntityId: "seed",
+      fieldKey: "voice_good_example",
+      normalizedValue: "مش المهم الـ ROAS عالي، المهم الشركة فعلاً بتكسب فلوس أكتر.",
+      scriptImpacts: ["VOICE"],
+      approvalStatus: "APPROVED",
+      confidence: 0.9,
+    },
+  });
+  const voiceBadExampleField = await prisma.scriptIntelligenceField.create({
+    data: {
+      clientId: client.id,
+      sourceEntityType: "GuidedSetupAnswer",
+      sourceEntityId: "seed",
+      fieldKey: "voice_bad_example",
+      normalizedValue: "احنا هنفجر مبيعاتك في أسبوع واحد بس! 🚀🔥",
+      scriptImpacts: ["VOICE"],
+      approvalStatus: "APPROVED",
+      confidence: 0.9,
+    },
+  });
+
+  // --- A completed Guided Setup session, with every answer traced back to the existing approved data it reused ---
+  const guidedSession = await prisma.guidedSetupSession.create({
+    data: {
+      clientId: client.id,
+      userId: strategist.id,
+      entryMode: "FULL_GUIDED",
+      status: "COMPLETED",
+      completedAt: now,
+    },
+  });
+
+  const guidedAnswers: {
+    questionKey: string;
+    rawAnswer: string;
+    sourceReference: string;
+  }[] = [
+    { questionKey: "business.client_name", rawAnswer: client.displayName, sourceReference: client.id },
+    { questionKey: "business.what_they_sell", rawAnswer: whatTheySellItem.valueText!, sourceReference: whatTheySellItem.id },
+    { questionKey: "business.content_objective", rawAnswer: "BELIEF_CHANGE", sourceReference: contentObjectiveField.id },
+    { questionKey: "audience.who", rawAnswer: mainCohort.name, sourceReference: mainCohort.id },
+    { questionKey: "audience.active_problem", rawAnswer: mainSituation.activeProblem!, sourceReference: mainSituation.id },
+    { questionKey: "audience.trigger", rawAnswer: mainSituation.triggerDescription!, sourceReference: mainSituation.id },
+    { questionKey: "belief.observed_situation", rawAnswer: approvedBelief.observedSituation!, sourceReference: approvedBelief.id },
+    { questionKey: "belief.current_belief", rawAnswer: approvedBelief.currentBeliefStatement, sourceReference: approvedBelief.id },
+    { questionKey: "belief.behavior_caused", rawAnswer: approvedBelief.behaviorCaused!, sourceReference: approvedBelief.id },
+    { questionKey: "belief.commercial_consequence", rawAnswer: approvedBelief.commercialConsequence!, sourceReference: approvedBelief.id },
+    { questionKey: "belief.better_belief", rawAnswer: approvedBelief.betterBeliefStatement!, sourceReference: approvedBelief.id },
+    { questionKey: "belief.better_decision", rawAnswer: approvedBelief.betterCommercialDecision!, sourceReference: approvedBelief.id },
+    { questionKey: "offer.has_offer", rawAnswer: "true", sourceReference: offer.id },
+    { questionKey: "offer.name", rawAnswer: offer.name, sourceReference: offer.id },
+    { questionKey: "offer.cta_route", rawAnswer: offer.ctaRoute!, sourceReference: offer.id },
+    { questionKey: "voice.good_example", rawAnswer: voiceGoodExampleField.normalizedValue, sourceReference: voiceGoodExampleField.id },
+    { questionKey: "voice.bad_example", rawAnswer: voiceBadExampleField.normalizedValue, sourceReference: voiceBadExampleField.id },
+    { questionKey: "safety.never_claim", rawAnswer: prohibitedClaimItem.valueText!, sourceReference: prohibitedClaimItem.id },
+  ];
+
+  for (const answer of guidedAnswers) {
+    await prisma.guidedSetupAnswer.create({
+      data: {
+        sessionId: guidedSession.id,
+        clientId: client.id,
+        questionKey: answer.questionKey,
+        rawAnswer: answer.rawAnswer,
+        normalizedValue: answer.rawAnswer,
+        sourceType: "EXISTING_CLIENT_BRAIN_ITEM",
+        sourceReference: answer.sourceReference,
+        confidence: 0.9,
+        approvalStatus: "APPROVED",
+        reviewedById: strategist.id,
+        reviewedAt: now,
+      },
+    });
+  }
+
+  // --- Compile the authorized ScriptGenerationContext by hand (mirrors scriptContextCompiler's output shape) ---
+  const seededContext: ScriptGenerationContext = {
+    meta: {
+      contextId: `ctx_seed_${mainCohort.id}`,
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      generatedAt: now.toISOString(),
+      version: 1,
+    },
+    request: {
+      cohortId: mainCohort.id,
+      contentObjective: "BELIEF_CHANGE",
+      platform: "INSTAGRAM_REELS",
+      offerId: offer.id,
+      beliefMapId: approvedBelief.id,
+      commercialSituationId: mainSituation.id,
+      ctaRoute: offer.ctaRoute,
+      format: "TALKING_HEAD",
+      durationSeconds: 50,
+    },
+    business: {
+      whatTheySell: whatTheySellItem.valueText,
+      businessModel: null,
+      category: "Commercial Marketing Belief Reframer",
+    },
+    audience: {
+      cohortName: mainCohort.name,
+      role: mainCohort.role,
+      activeProblem: mainSituation.activeProblem,
+      triggerDescription: mainSituation.triggerDescription,
+      currentWorkflow: mainCohort.currentWorkflow,
+      desiredOutcome: mainCohort.desiredOutcome,
+      decisionRisk: mainCohort.decisionRisk,
+      platformPresence: mainCohort.platformPresence,
+    },
+    beliefChain: {
+      observedSituation: approvedBelief.observedSituation,
+      currentInterpretation: approvedBelief.currentInterpretation,
+      currentBeliefStatement: approvedBelief.currentBeliefStatement,
+      behaviorCaused: approvedBelief.behaviorCaused,
+      commercialConsequence: approvedBelief.commercialConsequence,
+      betterBeliefStatement: approvedBelief.betterBeliefStatement,
+      betterCommercialDecision: approvedBelief.betterCommercialDecision,
+    },
+    offer: {
+      name: offer.name,
+      forWhom: offer.forWhom,
+      corePromise: offer.corePromise,
+      intendedOutcome: offer.intendedOutcome,
+      mechanism: offer.mechanism,
+      deliverables: offer.deliverables,
+      pricePresentation: offer.pricePresentation,
+      priceText: offer.priceText,
+      guarantee: offer.guarantee,
+      ctaRoute: offer.ctaRoute,
+    },
+    proof: [
+      {
+        proofType: proofItem.proofType,
+        whatHappened: proofItem.whatHappened,
+        whoForWhom: proofItem.whoForWhom,
+        startingPoint: proofItem.startingPoint,
+        whatChanged: proofItem.whatChanged,
+        overPeriod: proofItem.overPeriod,
+        limitations: proofItem.limitations,
+        evidenceStrength: proofItem.evidenceStrength,
+        publicUseStatus: proofItem.publicUseStatus,
+      },
+    ],
+    voice: {
+      language: "Egyptian Arabic",
+      dialect: null,
+      tones: ["Direct, calm authority; Egyptian Arabic with natural English business terminology."],
+      vocabulary: [],
+      prohibitedPhrases: ["No exaggerated creator language."],
+      technicality: voiceTechnicalityField.normalizedValue,
+      goodExample: voiceGoodExampleField.normalizedValue,
+      badExample: voiceBadExampleField.normalizedValue,
+      languageMixing: "Egyptian Arabic with natural English business terminology mixed in.",
+    },
+    execution: {
+      platform: "INSTAGRAM_REELS",
+      format: "TALKING_HEAD",
+      durationSeconds: 50,
+      speaker: "Kamal (client)",
+      editingLevel: "MODERATE",
+      cannotShow: [],
+    },
+    safety: {
+      neverClaim: [prohibitedClaimItem.valueText!],
+      legalRestrictions: [],
+      avoidTopics: [],
+      testimonialsPublic: true,
+      requiresApproval: false,
+      expiredClaims: [],
+    },
+    grounding: {
+      sourceReferences: [
+        { entityType: "Cohort", entityId: mainCohort.id, field: "name", approvalStatus: "APPROVED", approvedAt: now.toISOString() },
+        { entityType: "CommercialSituation", entityId: mainSituation.id, field: "activeProblem", approvalStatus: "APPROVED", approvedAt: now.toISOString() },
+        { entityType: "BeliefMap", entityId: approvedBelief.id, field: "currentBeliefStatement", approvalStatus: "APPROVED", approvedAt: now.toISOString() },
+        { entityType: "Offer", entityId: offer.id, field: "corePromise", approvalStatus: "APPROVED", approvedAt: now.toISOString() },
+        { entityType: "ProofItem", entityId: proofItem.id, field: "whatHappened", approvalStatus: "APPROVED", approvedAt: now.toISOString() },
+        { entityType: "ClientBrainItem", entityId: whatTheySellItem.id, field: "PRODUCTS_SERVICES", approvalStatus: "ACTIVE", approvedAt: now.toISOString() },
+        { entityType: "ClientBrainItem", entityId: prohibitedClaimItem.id, field: "CLAIM", approvalStatus: "ACTIVE", approvedAt: now.toISOString() },
+      ],
+      missingCriticalInputWarnings: [],
+    },
+  };
+  ScriptGenerationContextSchema.parse(seededContext);
+
+  const contextSnapshot = await prisma.scriptContextSnapshot.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      generationPurpose: "reel:BELIEF_CHANGE",
+      compiledContext: seededContext,
+      sourceManifest: seededContext.grounding.sourceReferences,
+      readiness: { warnings: [] },
+      warnings: [],
+      createdById: strategist.id,
+    },
+  });
+
+  // --- The seeded first Reel: a belief-changing script built from the chain above ---
+  const scriptFullText = [
+    "You're not failing at marketing. You're measuring the wrong thing.",
+    "Managers keep hitting their lead targets, then the CEO says the company still isn't making more money.",
+    "Sales conversion dropped 15% this quarter even though marketing hit every lead target.",
+    "So the instinct is: keep the ROAS high, and marketing did its job.",
+    "But high ROAS on the wrong leads just moves the blame downstream — sales still can't close them.",
+    "One client proved this: cutting a high-ROAS, poor-lead-quality campaign raised contribution profit by 22 percent.",
+    "Marketing efficiency has to be judged inside the whole commercial model, not by one isolated number. That means auditing the handoff before you scale spend.",
+    "Book a CEO Marketing Decision Session to walk through your own numbers.",
+  ].join(" ");
+  const seededWordCount = scriptFullText.split(/\s+/).filter(Boolean).length;
+  const arabicWordsPerMinute = 130;
+  const seededDurationSeconds = Math.round((seededWordCount / arabicWordsPerMinute) * 60);
+
+  const draftPackage: ReelScriptPackage = {
+    meta: {
+      packageId: `pkg_seed_${contextSnapshot.id}`,
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      contextSnapshotId: contextSnapshot.id,
+      generatedAt: now.toISOString(),
+      contentObjective: "BELIEF_CHANGE",
+      platform: "INSTAGRAM_REELS",
+    },
+    strategy: {
+      funnelStage: "Mid funnel — reframing a belief",
+      cognitiveObjective: "Replace a wrong belief with a better one",
+      coreTakeaway: "Marketing efficiency must be judged inside the whole commercial model, not by ROAS alone.",
+      beliefShiftFrom: approvedBelief.currentBeliefStatement,
+      beliefShiftTo: approvedBelief.betterBeliefStatement,
+      rationale: "Grounded in the approved belief chain and the 22% contribution-profit case for this cohort.",
+    },
+    hookOptions: [
+      { hookType: "EDUCATIONAL", text: "You're not failing at marketing. You're measuring the wrong thing.", rationale: "States the reframe directly." },
+      { hookType: "CONTRARIAN", text: "High ROAS is not proof your marketing is working.", rationale: "Directly contradicts the common belief." },
+      {
+        hookType: "STORY",
+        text: "A marketing manager told me: 'We keep scaling ROAS, but the CEO says we're still not making more money.'",
+        rationale: "Opens with a relatable, specific quote.",
+      },
+    ],
+    selectedHookIndex: 0,
+    script: {
+      segments: [
+        { type: "HOOK", text: "You're not failing at marketing. You're measuring the wrong thing.", visualDirection: "Direct to camera, calm delivery.", estimatedSeconds: 4 },
+        {
+          type: "LEAD",
+          text: "Managers keep hitting their lead targets, then the CEO says the company still isn't making more money.",
+          visualDirection: null,
+          estimatedSeconds: 6,
+        },
+        {
+          type: "BODY",
+          text: "Sales conversion dropped 15% this quarter even though marketing hit every lead target.",
+          visualDirection: null,
+          estimatedSeconds: 5,
+        },
+        { type: "REHOOK", text: "So the instinct is: keep the ROAS high, and marketing did its job.", visualDirection: null, estimatedSeconds: 4 },
+        {
+          type: "BODY",
+          text: "But high ROAS on the wrong leads just moves the blame downstream — sales still can't close them.",
+          visualDirection: null,
+          estimatedSeconds: 6,
+        },
+        {
+          type: "REHOOK",
+          text: "One client proved this: cutting a high-ROAS, poor-lead-quality campaign raised contribution profit by 22 percent.",
+          visualDirection: "Cut to a simple on-screen stat card showing the 22% result.",
+          estimatedSeconds: 7,
+        },
+        {
+          type: "PAYOFF",
+          text: "Marketing efficiency has to be judged inside the whole commercial model, not by one isolated number. That means auditing the handoff before you scale spend.",
+          visualDirection: null,
+          estimatedSeconds: 8,
+        },
+        { type: "CTA", text: "Book a CEO Marketing Decision Session to walk through your own numbers.", visualDirection: null, estimatedSeconds: 4 },
+      ],
+      fullText: scriptFullText,
+      estimatedDurationSeconds: seededDurationSeconds,
+      wordCount: seededWordCount,
+    },
+    production: {
+      format: "TALKING_HEAD",
+      speaker: "Kamal (client)",
+      editingLevel: "MODERATE",
+      visualPlan: ["Direct to camera, calm and direct delivery throughout.", "Cut to a simple on-screen stat card for the 22% contribution-profit result."],
+      resources: ["Phone or camera, no special equipment"],
+    },
+    commercial: {
+      portfolioRole: "COMMERCIAL_ASK",
+      ctaType: "BOOK",
+      ctaText: "Book a CEO Marketing Decision Session to walk through your own numbers.",
+      promotionalIntensity: "LIGHT",
+      claimStatus: "APPROVED",
+    },
+    audits: {
+      strategicGrounding: { status: "PASS", note: "pending" },
+      voiceAlignment: { status: "PASS", note: "pending" },
+      claimSafety: { status: "PASS", note: "pending" },
+      comprehension: { status: "PASS", note: "pending" },
+      platformFit: { status: "PASS", note: "pending" },
+      productionFeasibility: { status: "PASS", note: "pending" },
+    },
+    sources: seededContext.grounding.sourceReferences.map((ref) => ({ entityType: ref.entityType, entityId: ref.entityId, field: ref.field })),
+    warnings: [],
+    optionalAlternatives: [{ type: "HOOK", label: "Myth-busting angle", description: "Lead with a direct 'ROAS is a myth' framing instead of the plain statement." }],
+  };
+
+  const seededGates = computeReelValidation(seededContext, draftPackage);
+  const seededValidation = { gates: seededGates, readyToMarkReady: isReadyToMarkReady(seededGates, []), overrides: [] };
+  const finalPackage: ReelScriptPackage = { ...draftPackage, audits: summarizeGatesForPackage(seededGates) };
+  ReelScriptPackageSchema.parse(finalPackage);
+
+  const reelGeneration = await prisma.reelGeneration.create({
+    data: {
+      clientId: client.id,
+      cohortId: mainCohort.id,
+      contextSnapshotId: contextSnapshot.id,
+      status: seededValidation.readyToMarkReady ? "READY" : "DRAFT",
+      currentVersionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+  await prisma.reelVersion.create({
+    data: {
+      reelGenerationId: reelGeneration.id,
+      packageJson: finalPackage,
+      selectedHookIndex: finalPackage.selectedHookIndex,
+      validationJson: seededValidation,
+      versionNumber: 1,
+      createdById: strategist.id,
+    },
+  });
+
   const pendingCount = await prisma.importReview.count({ where: { clientId: client.id, status: "PENDING" } });
   const brainCount = await prisma.clientBrainItem.count({ where: { clientId: client.id } });
   const cohortCount = await prisma.cohort.count({ where: { clientId: client.id } });
@@ -1014,6 +1538,8 @@ async function main() {
   console.log(`  Strategy cohorts: ${cohortCount}`);
   console.log(`  Belief maps: ${beliefCount}`);
   console.log(`  Pending AI strategy suggestions: ${suggestionCount}`);
+  console.log(`  Guided setup session: completed, ${guidedAnswers.length} answers traced to existing approved data`);
+  console.log(`  Seeded first Reel: ${reelGeneration.id} (status: ${reelGeneration.status})`);
 }
 
 main()
