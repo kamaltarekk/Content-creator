@@ -1810,7 +1810,7 @@ model ScriptIntelligenceField {
 
   client Client @relation(fields: [clientId], references: [id])
 
-  @@index([clientId, fieldKey])
+  @@unique([clientId, fieldKey])
   @@index([clientId, sourceEntityType, sourceEntityId])
 }
 

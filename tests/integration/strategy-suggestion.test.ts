@@ -5,6 +5,7 @@ import { generateStrategySuggestion, resolveSuggestion, bulkApproveSuggestions }
 import type { AIProvider } from "@/server/providers/ai/ai.provider";
 import type { ClassificationResult, ClassifyBlockInput } from "@/server/providers/ai/ai.provider";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
+import type { GuidedAnswerSuggestionResult, SuggestGuidedAnswerInput } from "@/server/domain/guided-answer-suggestion";
 
 const RUN_ID = `strat-sugg-${process.pid}-${process.hrtime()[1]}`;
 let orgId: string;
@@ -21,6 +22,10 @@ class FakeStrategyProvider implements AIProvider {
   async suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult> {
     void input;
     return this.response;
+  }
+
+  async suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult> {
+    throw new Error(`suggestGuidedAnswer is not used in this test (question: ${input.question.slice(0, 10)})`);
   }
 }
 

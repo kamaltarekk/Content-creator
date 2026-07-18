@@ -15,6 +15,11 @@ import {
   type StrategySuggestionResult,
   type SuggestStrategyInput,
 } from "@/server/domain/strategy-suggestion";
+import {
+  GuidedAnswerSuggestionSchema,
+  type GuidedAnswerSuggestionResult,
+  type SuggestGuidedAnswerInput,
+} from "@/server/domain/guided-answer-suggestion";
 
 const DEFAULT_MODEL = "gpt-4.1-mini";
 
@@ -135,6 +140,36 @@ export class OpenAIProvider implements AIProvider {
 
     return result.data;
   }
+
+  async suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult> {
+    const completion = await this.client.chat.completions.create({
+      model: this.model,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: buildGuidedAnswerSystemPrompt() },
+        { role: "user", content: buildGuidedAnswerUserPrompt(input) },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      throw new AIProviderError("OpenAI returned an empty guided-answer suggestion response.");
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new AIProviderError("OpenAI guided-answer suggestion response was not valid JSON.");
+    }
+
+    const result = GuidedAnswerSuggestionSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new AIProviderError(`OpenAI guided-answer suggestion failed schema validation: ${result.error.message}`);
+    }
+    return result.data;
+  }
 }
 
 function buildStrategySystemPrompt(): string {
@@ -185,4 +220,28 @@ export function getAIProvider(): AIProvider {
     cachedProvider = new OpenAIProvider();
   }
   return cachedProvider;
+}
+
+function buildGuidedAnswerSystemPrompt(): string {
+  return [
+    "You suggest ONE answer to ONE plain-language setup question for a commercial video-script system.",
+    "Ground your answer only in the provided client context — never invent facts, results, prices, or names that aren't implied by it.",
+    "If the context doesn't support a confident answer, give your best reasonable inference and set confidence low.",
+    "Return ONLY a JSON object with these exact keys:",
+    "- value: your suggested answer, in plain language, matching the question's expected form",
+    "- confidence: a number 0..1",
+    "- reasoningSummary: ONE short, user-safe sentence explaining why (never internal chain-of-thought)",
+  ].join("\n");
+}
+
+function buildGuidedAnswerUserPrompt(input: SuggestGuidedAnswerInput): string {
+  return [
+    `Client: ${input.clientContext.clientName} (brand type: ${input.clientContext.brandType})`,
+    `Existing context: ${input.clientContext.existingBrainDigest || "(empty)"}`,
+    `Question: ${input.question}`,
+    input.helperText ? `Helper text: ${input.helperText}` : "",
+    input.example ? `Example of a good answer: ${input.example}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

@@ -3,6 +3,7 @@ import { ClientBrainFieldKey, ClientBrainSectionKey, InformationType, type Block
 
 import { SECTION_FIELD_MAP } from "@/server/domain/brain-schema";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
+import type { GuidedAnswerSuggestionResult, SuggestGuidedAnswerInput } from "@/server/domain/guided-answer-suggestion";
 
 /**
  * Strict schema for one block's classification. The AIProvider returns data
@@ -76,6 +77,8 @@ export interface AIProvider {
   classifyBlock(input: ClassifyBlockInput): Promise<ClassificationResult>;
   /** Module 2: proposes one strategy entity (cohort/situation/decision/belief/...) from authorized, client-scoped context only. */
   suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult>;
+  /** Module 3: "Let AI suggest" for one Guided Setup question — a single grounded answer, never fabricated. */
+  suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult>;
 }
 
 export class AIProviderError extends Error {}

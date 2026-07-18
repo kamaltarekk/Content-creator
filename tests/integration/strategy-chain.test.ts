@@ -11,6 +11,7 @@ import { generateStrategySuggestion, resolveSuggestion } from "@/server/services
 import { getStrategyReadinessForClient } from "@/server/services/strategyReadiness.service";
 import type { AIProvider, ClassificationResult, ClassifyBlockInput } from "@/server/providers/ai/ai.provider";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
+import type { GuidedAnswerSuggestionResult, SuggestGuidedAnswerInput } from "@/server/domain/guided-answer-suggestion";
 
 /**
  * The full Module 2 chain, end to end, with RUN_ID-namespaced fixtures
@@ -34,6 +35,9 @@ class FakeStrategyProvider implements AIProvider {
   async suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult> {
     void input;
     return this.response;
+  }
+  async suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult> {
+    throw new Error(`suggestGuidedAnswer is not used in this test (question: ${input.question.slice(0, 10)})`);
   }
 }
 

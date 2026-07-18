@@ -4,6 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import { classifySourceBlocks } from "@/server/services/classification.service";
 import type { AIProvider, ClassificationResult, ClassifyBlockInput } from "@/server/providers/ai/ai.provider";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
+import type { GuidedAnswerSuggestionResult, SuggestGuidedAnswerInput } from "@/server/domain/guided-answer-suggestion";
 
 /**
  * A deterministic fake AIProvider so the classification pipeline can be
@@ -50,6 +51,10 @@ class FakeAIProvider implements AIProvider {
       possible_conflicts: [],
       suggested_relationships: [],
     };
+  }
+
+  async suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult> {
+    throw new Error(`suggestGuidedAnswer is not used in this test (question: ${input.question.slice(0, 10)})`);
   }
 }
 
