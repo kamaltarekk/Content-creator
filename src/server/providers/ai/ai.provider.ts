@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ClientBrainFieldKey, ClientBrainSectionKey, InformationType, type BlockType, type SourceCategory } from "@prisma/client";
+import { ClientBrainFieldKey, ClientBrainSectionKey, InformationType, type BlockType, type RequestedStyle, type SourceCategory } from "@prisma/client";
 
 import { SECTION_FIELD_MAP } from "@/server/domain/brain-schema";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
@@ -81,8 +81,15 @@ export interface AIProvider {
   suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult>;
   /** Module 3: "Let AI suggest" for one Guided Setup question — a single grounded answer, never fabricated. */
   suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult>;
-  /** Module 3: generates a complete Reel script draft from a compiled ScriptGenerationContext — the ONLY input it ever sees. */
-  generateReelScript(context: ScriptGenerationContext): Promise<ReelScriptDraft>;
+  /**
+   * Module 3: generates a complete Reel script draft from a compiled
+   * ScriptGenerationContext — the ONLY authorized information it ever sees.
+   * `hint.requestedStyle` is a non-authoritative narrative-style preference
+   * (e.g. "tell it as a story") from the Create First Reel wizard — it
+   * biases which of the 3 hooks/angle the model leans toward, never a
+   * source of facts.
+   */
+  generateReelScript(context: ScriptGenerationContext, hint?: { requestedStyle?: RequestedStyle }): Promise<ReelScriptDraft>;
 }
 
 export class AIProviderError extends Error {}

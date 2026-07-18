@@ -1,6 +1,6 @@
 import type { AuditGateStatus } from "@prisma/client";
 
-import type { ReelScriptPackage } from "@/server/domain/reel-script-package";
+import type { ReelScriptPackage, AuditResult } from "@/server/domain/reel-script-package";
 import type { ScriptGenerationContext } from "@/server/domain/script-generation-context";
 
 /**
@@ -161,4 +161,35 @@ export function computeReelValidation(context: ScriptGenerationContext, pkg: Ree
 export function isReadyToMarkReady(gates: ValidationGateResult[], overrides: ValidationOverride[]): boolean {
   const overriddenKeys = new Set(overrides.map((o) => o.gateKey));
   return gates.every((gate) => gate.status === "PASS" || overriddenKeys.has(gate.key));
+}
+
+const GATE_SEVERITY: Record<AuditGateStatus, number> = { PASS: 0, WARNING: 1, FAIL: 2 };
+
+function worseOf(a: ValidationGateResult, b: ValidationGateResult): ValidationGateResult {
+  return GATE_SEVERITY[b.status] > GATE_SEVERITY[a.status] ? b : a;
+}
+
+function findGate(gates: ValidationGateResult[], key: ValidationGateKey): ValidationGateResult {
+  const gate = gates.find((g) => g.key === key);
+  if (!gate) throw new Error(`Missing validation gate: ${key}`);
+  return gate;
+}
+
+function toAuditResult(gate: ValidationGateResult): AuditResult {
+  return { status: gate.status, note: gate.note };
+}
+
+/** Condenses the 8 authoritative validation gates into the 6-key summary embedded in ReelScriptPackage for display. */
+export function summarizeGatesForPackage(gates: ValidationGateResult[]): ReelScriptPackage["audits"] {
+  const claimSafetyGate = worseOf(findGate(gates, "FACTUAL_GROUNDING"), findGate(gates, "CLAIM_SAFETY"));
+  const platformFitGate = worseOf(findGate(gates, "DURATION"), findGate(gates, "CTA_FIT"));
+
+  return {
+    strategicGrounding: toAuditResult(findGate(gates, "STRATEGIC_GROUNDING")),
+    voiceAlignment: toAuditResult(findGate(gates, "VOICE")),
+    claimSafety: toAuditResult(claimSafetyGate),
+    comprehension: toAuditResult(findGate(gates, "COMPREHENSION")),
+    platformFit: toAuditResult(platformFitGate),
+    productionFeasibility: toAuditResult(findGate(gates, "PRODUCTION_FEASIBILITY")),
+  };
 }

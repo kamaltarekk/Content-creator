@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/server/db/prisma";
 import { logAudit } from "@/server/services/audit.service";
-import type { ScriptGenerationContext } from "@/server/domain/script-generation-context";
+import { ScriptGenerationContextSchema, type ScriptGenerationContext } from "@/server/domain/script-generation-context";
 
 export type CreateScriptContextSnapshotInput = {
   clientId: string;
@@ -53,4 +53,10 @@ export async function createScriptContextSnapshot(input: CreateScriptContextSnap
 
 export async function getScriptContextSnapshot(snapshotId: string) {
   return prisma.scriptContextSnapshot.findUniqueOrThrow({ where: { id: snapshotId } });
+}
+
+/** Re-parses a persisted snapshot's compiled context, validating it still matches the strict schema. */
+export async function getScriptGenerationContext(snapshotId: string): Promise<ScriptGenerationContext> {
+  const snapshot = await getScriptContextSnapshot(snapshotId);
+  return ScriptGenerationContextSchema.parse(snapshot.compiledContext);
 }

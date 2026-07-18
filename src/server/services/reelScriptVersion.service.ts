@@ -4,7 +4,8 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/server/db/prisma";
 import { logAudit } from "@/server/services/audit.service";
-import type { ReelScriptPackage } from "@/server/domain/reel-script-package";
+import { getScriptGenerationContext } from "@/server/services/scriptContextSnapshot.service";
+import { ReelScriptPackageSchema, type ReelScriptPackage } from "@/server/domain/reel-script-package";
 import type { ReelValidationResult } from "@/server/domain/reel-validation";
 
 export type CreateReelGenerationInput = {
@@ -125,4 +126,13 @@ export async function listReelGenerationsForClient(clientId: string) {
     orderBy: { createdAt: "desc" },
     include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
   });
+}
+
+/** Loads a generation's latest package plus the exact authorized context it was grounded in — needed to re-validate any edit or hook change. */
+export async function getReelGenerationWithContext(reelGenerationId: string) {
+  const generation = await prisma.reelGeneration.findUniqueOrThrow({ where: { id: reelGenerationId } });
+  const latestVersion = await getLatestReelVersion(reelGenerationId);
+  const context = await getScriptGenerationContext(generation.contextSnapshotId);
+  const pkg = ReelScriptPackageSchema.parse(latestVersion.packageJson);
+  return { generation, latestVersion, context, package: pkg };
 }

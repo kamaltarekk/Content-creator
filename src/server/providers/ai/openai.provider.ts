@@ -1,6 +1,7 @@
 import "server-only";
 
 import OpenAI from "openai";
+import type { RequestedStyle } from "@prisma/client";
 
 import {
   AIProviderError,
@@ -173,14 +174,14 @@ export class OpenAIProvider implements AIProvider {
     return result.data;
   }
 
-  async generateReelScript(context: ScriptGenerationContext): Promise<ReelScriptDraft> {
+  async generateReelScript(context: ScriptGenerationContext, hint?: { requestedStyle?: RequestedStyle }): Promise<ReelScriptDraft> {
     const completion = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0.5,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: buildReelScriptSystemPrompt() },
-        { role: "user", content: buildReelScriptUserPrompt(context) },
+        { role: "user", content: buildReelScriptUserPrompt(context, hint?.requestedStyle) },
       ],
     });
 
@@ -301,6 +302,9 @@ function buildReelScriptSystemPrompt(): string {
   ].join("\n");
 }
 
-function buildReelScriptUserPrompt(context: ScriptGenerationContext): string {
-  return `Compiled, pre-approved ScriptGenerationContext (the only information you may use):\n${JSON.stringify(context, null, 2)}`;
+function buildReelScriptUserPrompt(context: ScriptGenerationContext, requestedStyle?: RequestedStyle): string {
+  const stylePart = requestedStyle
+    ? `\n\nPreferred narrative style (a bias, not a fact source — lean toward it, but never invent content to fit it): ${requestedStyle}`
+    : "";
+  return `Compiled, pre-approved ScriptGenerationContext (the only information you may use):\n${JSON.stringify(context, null, 2)}${stylePart}`;
 }

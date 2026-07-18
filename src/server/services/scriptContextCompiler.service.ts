@@ -70,9 +70,12 @@ export async function compileScriptContext(input: CompileScriptContextInput): Pr
     sourceReferences.push(toSourceRef("BeliefMap", beliefMap.id, "currentBeliefStatement", beliefMap.approvalStatus, beliefMap.updatedAt));
   }
 
+  // An offer is only auto-inferred for a commercial objective — never attached to educational/awareness content the user didn't ask to sell in.
   const offer = input.offerId
     ? await prisma.offer.findFirst({ where: { id: input.offerId, clientId: input.clientId, approvalStatus: "APPROVED" } })
-    : null;
+    : input.contentObjective === "OFFER_PROMOTION"
+      ? await prisma.offer.findFirst({ where: { clientId: input.clientId, approvalStatus: "APPROVED" }, orderBy: { updatedAt: "desc" } })
+      : null;
   if (offer) sourceReferences.push(toSourceRef("Offer", offer.id, "corePromise", offer.approvalStatus, offer.updatedAt));
   else if (input.offerId) warnings.push("The selected offer is not yet approved and was excluded from this context.");
 
