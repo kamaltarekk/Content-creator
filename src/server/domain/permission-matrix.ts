@@ -1,6 +1,16 @@
 import type { ClientRole, OrgRole } from "@prisma/client";
 
 /**
+ * Minimal shape the pure permission functions need. Matches the session user
+ * carried in the Auth.js JWT (see types/next-auth.d.ts) but avoids importing
+ * next-auth here so this module stays dependency-free and unit-testable.
+ */
+export type PermissionSubject = {
+  orgRole: OrgRole | null;
+  clientRoles: Record<string, ClientRole>;
+} | null;
+
+/**
  * All actions the app authorizes. Every server action / route handler must
  * call requireAction() (see server/auth/permissions.ts) with one of these
  * before doing anything — component-level role checks are UX-only.
@@ -65,3 +75,31 @@ export const ROLE_ACTIONS: Record<OrgRole | ClientRole, Action[]> = {
 
 /** Org roles that inherently apply to every client in the org (no ClientMember row needed). */
 export const ORG_WIDE_ROLES: OrgRole[] = ["OWNER", "ADMIN", "STRATEGIST", "EDITOR", "VIEWER"];
+
+/**
+ * Pure permission check: does this subject grant `action`, optionally scoped
+ * to a client? Org-wide roles (everything but CLIENT_APPROVER) grant their
+ * actions for any client automatically. CLIENT_APPROVER only grants access
+ * through an explicit ClientMember row in `clientRoles`.
+ */
+export function can(subject: PermissionSubject, action: Action, ctx?: { clientId?: string }): boolean {
+  if (!subject) return false;
+
+  if (subject.orgRole && ORG_WIDE_ROLES.includes(subject.orgRole)) {
+    if (ROLE_ACTIONS[subject.orgRole].includes(action)) return true;
+  }
+
+  if (ctx?.clientId) {
+    const clientRole = subject.clientRoles[ctx.clientId];
+    if (clientRole && ROLE_ACTIONS[clientRole].includes(action)) return true;
+  }
+
+  return false;
+}
+
+/** Does this subject have any relationship to `clientId` (org-wide role, or an explicit ClientMember row)? */
+export function hasClientAccess(subject: PermissionSubject, clientId: string): boolean {
+  if (!subject) return false;
+  if (subject.orgRole && ORG_WIDE_ROLES.includes(subject.orgRole)) return true;
+  return Boolean(subject.clientRoles[clientId]);
+}

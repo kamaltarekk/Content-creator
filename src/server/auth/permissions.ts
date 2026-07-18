@@ -3,7 +3,10 @@ import "server-only";
 import type { Session } from "next-auth";
 
 import { auth } from "@/server/auth/auth";
-import { ORG_WIDE_ROLES, ROLE_ACTIONS, type Action } from "@/server/domain/permission-matrix";
+import { can, hasClientAccess, type Action } from "@/server/domain/permission-matrix";
+
+export { can, hasClientAccess };
+export type { Action };
 
 export class AuthorizationError extends Error {
   constructor(message = "Not authorized") {
@@ -19,36 +22,6 @@ export class UnauthenticatedError extends Error {
   }
 }
 
-/**
- * Pure permission check: does this session grant `action`, optionally
- * scoped to a client? Org-wide roles (everything but CLIENT_APPROVER)
- * grant their actions for any client automatically. CLIENT_APPROVER only
- * grants access through an explicit ClientMember row on `session.user.clientRoles`.
- */
-export function can(session: Session | null, action: Action, ctx?: { clientId?: string }): boolean {
-  const user = session?.user;
-  if (!user) return false;
-
-  if (user.orgRole && ORG_WIDE_ROLES.includes(user.orgRole)) {
-    if (ROLE_ACTIONS[user.orgRole].includes(action)) return true;
-  }
-
-  if (ctx?.clientId) {
-    const clientRole = user.clientRoles[ctx.clientId];
-    if (clientRole && ROLE_ACTIONS[clientRole].includes(action)) return true;
-  }
-
-  return false;
-}
-
-/** Does this session have any relationship to `clientId` at all (org-wide role, or an explicit ClientMember row)? */
-export function hasClientAccess(session: Session | null, clientId: string): boolean {
-  const user = session?.user;
-  if (!user) return false;
-  if (user.orgRole && ORG_WIDE_ROLES.includes(user.orgRole)) return true;
-  return Boolean(user.clientRoles[clientId]);
-}
-
 export async function requireUser(): Promise<Session> {
   const session = await auth();
   if (!session?.user) throw new UnauthenticatedError();
@@ -57,7 +30,7 @@ export async function requireUser(): Promise<Session> {
 
 export async function requireClientAccess(clientId: string): Promise<Session> {
   const session = await requireUser();
-  if (!hasClientAccess(session, clientId)) {
+  if (!hasClientAccess(session.user, clientId)) {
     throw new AuthorizationError(`No access to client ${clientId}`);
   }
   return session;
@@ -65,7 +38,7 @@ export async function requireClientAccess(clientId: string): Promise<Session> {
 
 export async function requireAction(action: Action, ctx?: { clientId?: string }): Promise<Session> {
   const session = await requireUser();
-  if (!can(session, action, ctx)) {
+  if (!can(session.user, action, ctx)) {
     throw new AuthorizationError(`Missing permission: ${action}`);
   }
   return session;

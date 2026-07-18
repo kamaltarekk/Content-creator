@@ -5,6 +5,7 @@ import type { SourceProcessingStatus } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import type { JobContext, JobHandler, JobPayloadMap } from "@/server/jobs/jobRunner";
 import { extractAndPersistBlocks } from "@/server/services/extraction.service";
+import { classifySourceBlocks } from "@/server/services/classification.service";
 
 async function setStatus(sourceId: string, status: SourceProcessingStatus, requiresMultimodal?: boolean) {
   await prisma.source.update({
@@ -17,10 +18,11 @@ async function setStatus(sourceId: string, status: SourceProcessingStatus, requi
 }
 
 /**
- * Processing pipeline for one source: extract text into location-preserving
- * blocks. AI classification (which turns blocks into reviewable ExtractedItems)
- * is layered on in the classification milestone; until then a source with
- * blocks is marked READY_FOR_REVIEW. Nothing here writes to the Client Brain.
+ * Full processing pipeline for one source: extract text into
+ * location-preserving blocks, then classify each block into a proposed
+ * Client Brain destination with a PENDING ImportReview attached. Nothing here
+ * writes to the Client Brain — every result lands in the review queue for a
+ * human to approve.
  */
 export const processSourceHandler: JobHandler<"PROCESS_SOURCE"> = {
   async handle(_payload: JobPayloadMap["PROCESS_SOURCE"], ctx: JobContext) {
@@ -39,7 +41,20 @@ export const processSourceHandler: JobHandler<"PROCESS_SOURCE"> = {
       return { summary: { blockCount: 0, reason } };
     }
 
-    await setStatus(ctx.sourceId, "READY_FOR_REVIEW");
-    return { summary: { blockCount } };
+    const classification = await classifySourceBlocks(ctx.sourceId);
+
+    // If no block could be classified (e.g. AI provider unavailable), the
+    // source still needs a human look rather than a silently-empty queue.
+    const finalStatus: SourceProcessingStatus =
+      classification.classifiedCount === 0 ? "NEEDS_ATTENTION" : "READY_FOR_REVIEW";
+    await setStatus(ctx.sourceId, finalStatus);
+
+    return {
+      summary: {
+        blockCount,
+        classifiedCount: classification.classifiedCount,
+        skippedCount: classification.skippedCount,
+      },
+    };
   },
 };
