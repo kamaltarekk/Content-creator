@@ -13,6 +13,7 @@ import { EditCohortDialog } from "@/components/strategy/edit-cohort-dialog";
 import { AddCohortSourceDialog } from "@/components/strategy/add-cohort-source-dialog";
 import { AddSituationDialog } from "@/components/strategy/add-situation-dialog";
 import { AddDecisionDialog } from "@/components/strategy/add-decision-dialog";
+import { AddBeliefDialog } from "@/components/strategy/add-belief-dialog";
 import Link from "next/link";
 
 const APPROVAL_VARIANT = {
@@ -219,15 +220,25 @@ export function CohortDetailView({
         </TabsContent>
 
         <TabsContent value="beliefs" className="flex flex-col gap-3">
+          {canEdit && (
+            <div className="flex justify-end">
+              <AddBeliefDialog clientId={clientId} cohortId={cohort.id} navigateToDetail />
+            </div>
+          )}
           {cohort.beliefMaps.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              No belief maps yet — build one in the Belief-to-Decision Engine.
+              No belief maps yet — what does this cohort currently (wrongly) believe?
             </p>
           ) : (
             cohort.beliefMaps.map((belief) => (
               <div key={belief.id} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
-                  <p className="font-medium text-foreground">{belief.currentBeliefStatement}</p>
+                  <Link
+                    href={`/c/${clientId}/strategy/beliefs/${belief.id}`}
+                    className="font-medium text-foreground hover:text-lime hover:underline"
+                  >
+                    {belief.currentBeliefStatement}
+                  </Link>
                   <Badge variant="outline">{BELIEF_TYPE_LABELS[belief.beliefType]}</Badge>
                 </div>
                 <Field label="Better belief" value={belief.betterBeliefStatement} />
