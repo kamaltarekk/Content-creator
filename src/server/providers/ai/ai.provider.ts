@@ -4,6 +4,8 @@ import { ClientBrainFieldKey, ClientBrainSectionKey, InformationType, type Block
 import { SECTION_FIELD_MAP } from "@/server/domain/brain-schema";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
 import type { GuidedAnswerSuggestionResult, SuggestGuidedAnswerInput } from "@/server/domain/guided-answer-suggestion";
+import type { ReelScriptDraft } from "@/server/domain/reel-script-package";
+import type { ScriptGenerationContext } from "@/server/domain/script-generation-context";
 
 /**
  * Strict schema for one block's classification. The AIProvider returns data
@@ -79,6 +81,8 @@ export interface AIProvider {
   suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult>;
   /** Module 3: "Let AI suggest" for one Guided Setup question — a single grounded answer, never fabricated. */
   suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult>;
+  /** Module 3: generates a complete Reel script draft from a compiled ScriptGenerationContext — the ONLY input it ever sees. */
+  generateReelScript(context: ScriptGenerationContext): Promise<ReelScriptDraft>;
 }
 
 export class AIProviderError extends Error {}

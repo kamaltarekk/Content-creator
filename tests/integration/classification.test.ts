@@ -5,6 +5,8 @@ import { classifySourceBlocks } from "@/server/services/classification.service";
 import type { AIProvider, ClassificationResult, ClassifyBlockInput } from "@/server/providers/ai/ai.provider";
 import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
 import type { GuidedAnswerSuggestionResult, SuggestGuidedAnswerInput } from "@/server/domain/guided-answer-suggestion";
+import type { ReelScriptDraft } from "@/server/domain/reel-script-package";
+import type { ScriptGenerationContext } from "@/server/domain/script-generation-context";
 
 /**
  * A deterministic fake AIProvider so the classification pipeline can be
@@ -55,6 +57,9 @@ class FakeAIProvider implements AIProvider {
 
   async suggestGuidedAnswer(input: SuggestGuidedAnswerInput): Promise<GuidedAnswerSuggestionResult> {
     throw new Error(`suggestGuidedAnswer is not used in this test (question: ${input.question.slice(0, 10)})`);
+  }
+  async generateReelScript(context: ScriptGenerationContext): Promise<ReelScriptDraft> {
+    throw new Error(`generateReelScript is not used in this test (client: ${context.meta.clientId})`);
   }
 }
 

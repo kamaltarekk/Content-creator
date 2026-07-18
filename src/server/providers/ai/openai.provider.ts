@@ -20,6 +20,8 @@ import {
   type GuidedAnswerSuggestionResult,
   type SuggestGuidedAnswerInput,
 } from "@/server/domain/guided-answer-suggestion";
+import { ReelScriptDraftSchema, type ReelScriptDraft } from "@/server/domain/reel-script-package";
+import type { ScriptGenerationContext } from "@/server/domain/script-generation-context";
 
 const DEFAULT_MODEL = "gpt-4.1-mini";
 
@@ -170,6 +172,36 @@ export class OpenAIProvider implements AIProvider {
     }
     return result.data;
   }
+
+  async generateReelScript(context: ScriptGenerationContext): Promise<ReelScriptDraft> {
+    const completion = await this.client.chat.completions.create({
+      model: this.model,
+      temperature: 0.5,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: buildReelScriptSystemPrompt() },
+        { role: "user", content: buildReelScriptUserPrompt(context) },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      throw new AIProviderError("OpenAI returned an empty Reel script response.");
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new AIProviderError("OpenAI Reel script response was not valid JSON.");
+    }
+
+    const result = ReelScriptDraftSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new AIProviderError(`OpenAI Reel script response failed schema validation: ${result.error.message}`);
+    }
+    return result.data;
+  }
 }
 
 function buildStrategySystemPrompt(): string {
@@ -244,4 +276,31 @@ function buildGuidedAnswerUserPrompt(input: SuggestGuidedAnswerInput): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function buildReelScriptSystemPrompt(): string {
+  return [
+    "You write a complete short-form video Reel script from a compiled, pre-approved context. This is the ONLY information you may use — never invent",
+    "results, statistics, customer stories, credentials, prices, guarantees, scarcity, deadlines, claims, or quotes that aren't explicitly present in the context.",
+    "If proof is missing, use reasoning, an approved point of view, or a clearly-labeled hypothetical instead — never imply a verified result you don't have.",
+    "",
+    "Default script architecture (segments do not all have to be used): HOOK -> LEAD -> BODY -> REHOOK -> BODY -> REHOOK -> BODY -> PAYOFF -> CTA or VALUE_EXTENSION.",
+    "If a beliefChain is present, structure the script around it: observed situation -> current belief -> why it feels reasonable -> the problem with that belief -> evidence or logic -> better belief -> better commercial decision.",
+    "The script must deliver exactly one atomic takeaway.",
+    "",
+    "Return ONLY a JSON object with these exact top-level keys: strategy, hookOptions, selectedHookIndex, script, production, commercial, optionalAlternatives.",
+    "- strategy: {funnelStage, cognitiveObjective, coreTakeaway, beliefShiftFrom (nullable), beliefShiftTo (nullable), rationale (one short user-safe paragraph, never chain-of-thought)}",
+    "- hookOptions: EXACTLY 3 objects, each {hookType: one of EDUCATIONAL, STORY, AUTHORITY, MYTH_BUSTING, COMPARISON, DAY_IN_THE_LIFE, CONTRARIAN, INVESTIGATOR, EXPERIMENTER, TEACHER; text; rationale}",
+    "- selectedHookIndex: 0, 1, or 2 — the hook you recommend",
+    "- script: {segments: array of {type: one of HOOK, LEAD, BODY, REHOOK, PAYOFF, CTA, VALUE_EXTENSION; text; visualDirection (nullable); estimatedSeconds}, fullText, estimatedDurationSeconds, wordCount}",
+    "- production: {format: one of TALKING_HEAD, VOICEOVER, INTERVIEW, CASE_BREAKDOWN, SCREEN_RECORDING, VLOG, SKIT, REACTION, GREEN_SCREEN; speaker (nullable); editingLevel: SIMPLE, MODERATE, or ADVANCED; visualPlan: string[]; resources: string[]}",
+    "- commercial: {portfolioRole: VALUE, BRIDGE, or COMMERCIAL_ASK; ctaType: one of NONE, SAVE, SHARE, FOLLOW, COMMENT, DM, DOWNLOAD, BOOK, APPLY, PURCHASE, WATCH_NEXT; ctaText (nullable); promotionalIntensity: NONE, LIGHT, MODERATE, or DIRECT; claimStatus: APPROVED, RESTRICTED, or POSITIONING_ONLY}",
+    "- optionalAlternatives: array of {type: HOOK, ANGLE, or CTA; label; description} — other directions not taken",
+    "",
+    "If the context has no offer or proof, this must be educational/value content only: portfolioRole VALUE, ctaType NONE or SAVE/SHARE/FOLLOW, claimStatus POSITIONING_ONLY, promotionalIntensity NONE.",
+  ].join("\n");
+}
+
+function buildReelScriptUserPrompt(context: ScriptGenerationContext): string {
+  return `Compiled, pre-approved ScriptGenerationContext (the only information you may use):\n${JSON.stringify(context, null, 2)}`;
 }
