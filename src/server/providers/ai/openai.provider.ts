@@ -10,6 +10,11 @@ import {
   type ClassifyBlockInput,
 } from "@/server/providers/ai/ai.provider";
 import { SECTION_FIELD_MAP } from "@/server/domain/brain-schema";
+import {
+  StrategySuggestionSchema,
+  type StrategySuggestionResult,
+  type SuggestStrategyInput,
+} from "@/server/domain/strategy-suggestion";
 
 const DEFAULT_MODEL = "gpt-4.1-mini";
 
@@ -99,6 +104,77 @@ export class OpenAIProvider implements AIProvider {
 
     return result.data;
   }
+
+  async suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult> {
+    const completion = await this.client.chat.completions.create({
+      model: this.model,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: buildStrategySystemPrompt() },
+        { role: "user", content: buildStrategyUserPrompt(input) },
+      ],
+    });
+
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      throw new AIProviderError("OpenAI returned an empty strategy suggestion response.");
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new AIProviderError("OpenAI strategy suggestion response was not valid JSON.");
+    }
+
+    const result = StrategySuggestionSchema.safeParse(parsed);
+    if (!result.success) {
+      throw new AIProviderError(`OpenAI strategy suggestion failed schema validation: ${result.error.message}`);
+    }
+
+    return result.data;
+  }
+}
+
+function buildStrategySystemPrompt(): string {
+  return [
+    "You propose ONE new strategy entity for a commercial reasoning system. This is not a persona generator —",
+    "every suggestion must be grounded in the provided context (the Client Brain digest, existing strategy digest,",
+    "and selected audience signals). Never invent facts, evidence, or names that aren't implied by the context.",
+    "",
+    "Return ONLY a JSON object with these exact keys:",
+    "- suggestion_type: one of COHORT, COMMERCIAL_SITUATION, BUYING_DECISION, BUYING_ROLE_PARTICIPANT, BELIEF_MAP, EVIDENCE_LINK, RELATIONSHIP, OTHER",
+    "- title: a short, specific title for the suggestion (not a generic label)",
+    "- proposed_fields: an object with the fields for that suggestion_type. Field shapes:",
+    "  COHORT: {name, definition, priority, role, commercialContext, currentWorkflow, currentBelief, desiredOutcome, decisionRisk, attentionNotes}",
+    "  COMMERCIAL_SITUATION: {cohortId, title, triggerType, triggerDescription, activeProblem, currentWorkflow, urgencyNote}",
+    "  BUYING_DECISION: {cohortId, title, decisionType, description, timeframe}",
+    "  BUYING_ROLE_PARTICIPANT: {buyingDecisionId, role, label, influenceScore, stance, notes}",
+    "  BELIEF_MAP: {cohortId, currentBeliefStatement, beliefType, observedSituation, currentInterpretation, behaviorCaused, commercialConsequence, betterBeliefStatement, betterCommercialDecision}",
+    "  EVIDENCE_LINK: {targetEntityType, targetEntityId, description, evidenceStrength}",
+    "  RELATIONSHIP: {fromEntityId, toEntityId, relationshipType}",
+    "  Use ids from the existing strategy digest when referencing an existing cohort/decision/entity; omit a key if you don't have a grounded value rather than guessing.",
+    "- source_references: array of {source_type, reference_id, note?} pointing at what in the context grounds this suggestion",
+    "- confidence: 0..1",
+    "- reasoning_summary: ONE short, user-safe sentence (never internal chain-of-thought)",
+    "- missing_evidence: short list of what evidence would be needed to fully validate this",
+    "- possible_conflicts: array of {existing_entity_type, existing_entity_id, reason} — only if the existing strategy digest shows something this might duplicate or contradict, else an empty array",
+    "- suggested_relationships: array of {target_entity_type, target_entity_id, relationship_type} — only for entities that already exist in the digest, else an empty array",
+  ].join("\n");
+}
+
+function buildStrategyUserPrompt(input: SuggestStrategyInput): string {
+  return [
+    `Client: ${input.context.clientName} (brand type: ${input.context.brandType})`,
+    `Requested suggestion type: ${input.targetType}`,
+    "Client Brain digest:",
+    input.context.existingBrainDigest || "(empty)",
+    "Existing strategy digest (cohorts, situations, decisions, beliefs already in the system):",
+    input.context.existingStrategyDigest || "(empty)",
+    "Selected audience signals:",
+    input.context.selectedAudienceSignals.length > 0 ? input.context.selectedAudienceSignals.join("\n") : "(none selected)",
+  ].join("\n");
 }
 
 let cachedProvider: AIProvider | null = null;

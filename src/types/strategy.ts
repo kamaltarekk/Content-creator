@@ -8,6 +8,7 @@ import type {
   StrategicRelationshipType,
   StrategyApprovalStatus,
   StrategyEntityStatus,
+  StrategySuggestionType,
   TriggerType,
 } from "@prisma/client";
 import type { CohortQualityResult } from "@/server/domain/cohort-quality";
@@ -135,6 +136,28 @@ export type CohortSourceReferenceView = {
   audienceSignalNote: string | null;
   note: string | null;
   linkedAt: string;
+};
+
+export type SuggestionSourceReference = { source_type: string; reference_id: string; note?: string };
+export type SuggestionPossibleConflict = { existing_entity_type: string; existing_entity_id: string; reason: string };
+export type SuggestionRelationship = { target_entity_type: string; target_entity_id: string; relationship_type: string };
+
+export type StrategySuggestionView = {
+  id: string;
+  suggestionType: StrategySuggestionType;
+  title: string;
+  proposedFields: Record<string, string | string[] | number | null>;
+  sourceReferences: SuggestionSourceReference[];
+  confidence: number;
+  reasoningSummary: string;
+  missingEvidence: string[];
+  possibleConflicts: SuggestionPossibleConflict[];
+  suggestedRelationships: SuggestionRelationship[];
+  status: StrategyApprovalStatus;
+  isDuplicateCandidate: boolean;
+  duplicateOfEntityType: StrategicEntityType | null;
+  duplicateOfEntityId: string | null;
+  createdAt: string;
 };
 
 export type StrategicEntityView = {

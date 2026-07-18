@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/server/db/prisma";
 import { classifySourceBlocks } from "@/server/services/classification.service";
 import type { AIProvider, ClassificationResult, ClassifyBlockInput } from "@/server/providers/ai/ai.provider";
+import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
 
 /**
  * A deterministic fake AIProvider so the classification pipeline can be
@@ -34,6 +35,20 @@ class FakeAIProvider implements AIProvider {
       is_conflict_candidate: false,
       reasoning_summary: "Unclassified note.",
       suggested_tags: [],
+    };
+  }
+
+  async suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult> {
+    return {
+      suggestion_type: input.targetType,
+      title: "Fake suggestion",
+      proposed_fields: { name: "Fake cohort" },
+      source_references: [],
+      confidence: 0.5,
+      reasoning_summary: "Fake provider stub.",
+      missing_evidence: [],
+      possible_conflicts: [],
+      suggested_relationships: [],
     };
   }
 }

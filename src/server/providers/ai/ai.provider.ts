@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ClientBrainFieldKey, ClientBrainSectionKey, InformationType, type BlockType, type SourceCategory } from "@prisma/client";
 
 import { SECTION_FIELD_MAP } from "@/server/domain/brain-schema";
+import type { StrategySuggestionResult, SuggestStrategyInput } from "@/server/domain/strategy-suggestion";
 
 /**
  * Strict schema for one block's classification. The AIProvider returns data
@@ -73,6 +74,8 @@ export type ClassifyBlockInput = {
  */
 export interface AIProvider {
   classifyBlock(input: ClassifyBlockInput): Promise<ClassificationResult>;
+  /** Module 2: proposes one strategy entity (cohort/situation/decision/belief/...) from authorized, client-scoped context only. */
+  suggestStrategy(input: SuggestStrategyInput): Promise<StrategySuggestionResult>;
 }
 
 export class AIProviderError extends Error {}
