@@ -29,6 +29,14 @@ export function getClientById(clientId: string) {
   });
 }
 
+export function listClientOptionsForOrg(organizationId: string) {
+  return prisma.client.findMany({
+    where: { organizationId, status: "ACTIVE" },
+    orderBy: { displayName: "asc" },
+    select: { id: true, displayName: true },
+  });
+}
+
 export async function listClientsForOrg(organizationId: string) {
   const clients = await prisma.client.findMany({
     where: { organizationId },
