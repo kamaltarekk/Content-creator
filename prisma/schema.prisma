@@ -504,6 +504,238 @@ enum StrategySuggestionAction {
 }
 
 // =========================================================================
+// MODULE 3 ENUMS — Guided Client Setup + Script Intelligence Compiler + First Reel Generator
+// =========================================================================
+
+/**
+ * What a piece of information changes about the final Reel. A question or
+ * imported field with no Script Impact (and no SYSTEM_ONLY operational need)
+ * must never be asked, imported, or promoted into Script Intelligence.
+ */
+enum ScriptImpact {
+  AUDIENCE
+  HOOK
+  ANGLE
+  STORY
+  BODY
+  EXAMPLE
+  PROOF
+  REFRAME
+  VOICE
+  CTA
+  FORMAT
+  VISUAL
+  SAFETY
+  LEARNING
+  SYSTEM_ONLY
+}
+
+enum GuidedSetupEntryMode {
+  FULL_GUIDED
+  FAST_IMPORT
+}
+
+enum GuidedSetupStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum GuidedSetupSection {
+  BUSINESS
+  AUDIENCE
+  BELIEF_DECISION
+  OFFER
+  PROOF
+  VOICE
+  EXECUTION
+  SAFETY
+  FINAL_REVIEW
+}
+
+enum GuidedAnswerType {
+  SHORT_TEXT
+  LONG_TEXT
+  SINGLE_SELECT
+  MULTI_SELECT
+  BOOLEAN
+  NUMBER
+  CURRENCY
+  DURATION
+  FILE
+  VOICE_INPUT_PLACEHOLDER
+  ENTITY_SELECT
+  AI_SUGGESTION_REVIEW
+}
+
+enum GuidedRequiredLevel {
+  REQUIRED_FOR_ANY_REEL
+  REQUIRED_FOR_COMMERCIAL_REEL
+  RECOMMENDED
+  OPTIONAL
+  CONDITIONAL
+}
+
+/**
+ * Source-priority hierarchy: existing trusted data always outranks asking the user.
+ */
+enum GuidedAnswerSourceType {
+  EXISTING_CLIENT_BRAIN_ITEM
+  EXISTING_STRATEGY_ENTITY
+  AI_SUGGESTION
+  USER_INPUT
+  DEFAULT_VALUE
+}
+
+enum OfferPricePresentation {
+  NOT_SELLING_YET
+  DO_NOT_MENTION_PRICE
+  CUSTOM_QUOTATION
+  STARTING_FROM
+  EXACT_PRICE
+  PRICE_RANGE
+  FREE
+}
+
+enum ProofType {
+  CASE_STUDY
+  RESULT
+  TESTIMONIAL
+  EXPERIENCE
+  CREDENTIAL
+  FRAMEWORK
+  PROCESS
+  DEMONSTRATION
+  SCREENSHOT
+  ARTIFACT
+  CUSTOMER_EXAMPLE
+}
+
+enum PublicUseStatus {
+  PUBLIC
+  PUBLIC_ANONYMOUS
+  INTERNAL_ONLY
+  REQUIRES_APPROVAL
+  PROHIBITED
+}
+
+enum ReelPlatform {
+  INSTAGRAM_REELS
+}
+
+enum ContentObjective {
+  AWARENESS
+  EDUCATION
+  BELIEF_CHANGE
+  TRUST
+  OBJECTION_HANDLING
+  OFFER_PROMOTION
+}
+
+enum ReelFormat {
+  TALKING_HEAD
+  VOICEOVER
+  INTERVIEW
+  CASE_BREAKDOWN
+  SCREEN_RECORDING
+  VLOG
+  SKIT
+  REACTION
+  GREEN_SCREEN
+}
+
+enum PromotionalIntensity {
+  NONE
+  LIGHT
+  MODERATE
+  DIRECT
+}
+
+enum RequestedStyle {
+  DIRECT
+  STORY
+  CASE
+  MYTH_BUSTING
+  COMPARISON
+  AUTHORITY
+  EDUCATIONAL
+}
+
+enum ReelTechnicality {
+  VERY_SIMPLE
+  SIMPLE_WITH_BUSINESS_TERMS
+  PROFESSIONAL
+  TECHNICAL
+}
+
+enum ProductionEditingLevel {
+  SIMPLE
+  MODERATE
+  ADVANCED
+}
+
+enum HookType {
+  EDUCATIONAL
+  STORY
+  AUTHORITY
+  MYTH_BUSTING
+  COMPARISON
+  DAY_IN_THE_LIFE
+  CONTRARIAN
+  INVESTIGATOR
+  EXPERIMENTER
+  TEACHER
+}
+
+enum ScriptSegmentType {
+  HOOK
+  LEAD
+  BODY
+  REHOOK
+  PAYOFF
+  CTA
+  VALUE_EXTENSION
+}
+
+enum PortfolioRole {
+  VALUE
+  BRIDGE
+  COMMERCIAL_ASK
+}
+
+enum CtaType {
+  NONE
+  SAVE
+  SHARE
+  FOLLOW
+  COMMENT
+  DM
+  DOWNLOAD
+  BOOK
+  APPLY
+  PURCHASE
+  WATCH_NEXT
+}
+
+enum ReelClaimStatus {
+  APPROVED
+  RESTRICTED
+  POSITIONING_ONLY
+}
+
+enum AuditGateStatus {
+  PASS
+  WARNING
+  FAIL
+}
+
+enum ReelGenerationStatus {
+  DRAFT
+  READY
+  ARCHIVED
+}
+
+// =========================================================================
 // CORE / AUTH
 // =========================================================================
 
@@ -585,6 +817,15 @@ model Client {
   strategicRelationships     StrategicRelationship[]
   strategySuggestions        StrategySuggestion[]
   strategyReadinessSnapshots StrategyReadinessSnapshot[]
+
+  // Module 3 — Guided Client Setup + Script Intelligence Compiler + First Reel Generator
+  guidedSetupSessions    GuidedSetupSession[]
+  guidedSetupAnswers     GuidedSetupAnswer[]
+  scriptIntelligence     ScriptIntelligenceField[]
+  scriptContextSnapshots ScriptContextSnapshot[]
+  offers                 Offer[]
+  proofItems             ProofItem[]
+  reelGenerations        ReelGeneration[]
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
@@ -1447,4 +1688,290 @@ model StrategyReadinessSnapshot {
   client Client @relation(fields: [clientId], references: [id])
 
   @@index([clientId, generatedAt])
+}
+
+// =========================================================================
+// MODULE 3 — GUIDED CLIENT SETUP + SCRIPT INTELLIGENCE COMPILER + FIRST REEL GENERATOR
+//
+// Guided Mode is the default Client Brain experience; the dense Module 1
+// Client Brain becomes Expert Mode. A configurable question engine collects
+// only information with a Script Impact, reusing existing Module 1/2 data
+// wherever a trusted answer already exists. Approved answers compile into a
+// versioned ScriptGenerationContext, which the AI turns into a ReelScriptPackage
+// behind deterministic validation gates. Nothing here duplicates the Client
+// Brain — GuidedSetupAnswer/ScriptIntelligenceField reference existing
+// entities via relation-less ids, the same traceability pattern as
+// ClientBrainItemSource / CohortSourceReference.
+// =========================================================================
+
+model GuidedSetupSession {
+  id       String @id @default(cuid())
+  clientId String
+  userId   String
+
+  entryMode          GuidedSetupEntryMode @default(FULL_GUIDED)
+  status             GuidedSetupStatus    @default(IN_PROGRESS)
+  currentSection     GuidedSetupSection?
+  currentQuestionKey String?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  client  Client              @relation(fields: [clientId], references: [id])
+  answers GuidedSetupAnswer[]
+
+  @@index([clientId, status])
+}
+
+/**
+ * The seeded, global question catalog driving Guided Setup — never
+ * hardcoded in a React component. A question may only exist here if it
+ * carries at least one ScriptImpact, or is SYSTEM_ONLY and operationally
+ * necessary (enforced by validateQuestionDefinition in the domain layer).
+ */
+model GuidedSetupQuestionDefinition {
+  id  String @id @default(cuid())
+  key String @unique
+
+  section            GuidedSetupSection
+  userFacingQuestion String
+  helperText         String?
+  example            String?
+  answerType         GuidedAnswerType
+  options            Json?
+  requiredLevel      GuidedRequiredLevel
+  scriptImpacts      ScriptImpact[]
+  destinationEntity  String?
+  destinationField   String?
+  conditionalLogic   Json?
+  plainLanguageLabel String?
+  expertLabel        String?
+  displayOrder       Int
+  isActive           Boolean             @default(true)
+  version            Int                 @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([section, displayOrder])
+}
+
+model GuidedSetupAnswer {
+  id        String @id @default(cuid())
+  sessionId String
+  clientId  String
+
+  questionKey     String
+  rawAnswer       String?
+  normalizedValue String?
+  sourceType      GuidedAnswerSourceType
+  sourceReference String?
+  confidence      Float?
+  approvalStatus  StrategyApprovalStatus @default(DRAFT)
+
+  reviewedById String?
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session GuidedSetupSession @relation(fields: [sessionId], references: [id])
+  client  Client             @relation(fields: [clientId], references: [id])
+
+  @@unique([sessionId, questionKey])
+  @@index([clientId, questionKey])
+}
+
+/**
+ * The compiled, queryable projection of "active script-relevant intelligence"
+ * for a client — sourced from approved GuidedSetupAnswers and existing
+ * Module 1/2 entities alike. This is what scriptContextCompiler reads from;
+ * it is a read-optimized index, not a duplicate store of truth.
+ */
+model ScriptIntelligenceField {
+  id       String @id @default(cuid())
+  clientId String
+
+  sourceEntityType String
+  sourceEntityId   String
+  fieldKey         String
+  normalizedValue  String
+  scriptImpacts    ScriptImpact[]
+  approvalStatus   StrategyApprovalStatus @default(DRAFT)
+  confidence       Float?
+
+  validFrom  DateTime  @default(now())
+  validUntil DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([clientId, fieldKey])
+  @@index([clientId, sourceEntityType, sourceEntityId])
+}
+
+/**
+ * An immutable, versioned compilation of ScriptGenerationContext, ready for AI generation.
+ */
+model ScriptContextSnapshot {
+  id       String  @id @default(cuid())
+  clientId String
+  cohortId String?
+
+  generationPurpose String
+  compiledContext   Json
+  sourceManifest    Json
+  readiness         Json?
+  warnings          String[]
+
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@index([clientId, createdAt])
+}
+
+model Offer {
+  id       String @id @default(cuid())
+  clientId String
+
+  name              String
+  forWhom           String?
+  problemAddressed  String?
+  corePromise       String?
+  intendedOutcome   String?
+  mechanism         String?
+  deliverables      String[]
+  pricePresentation OfferPricePresentation @default(NOT_SELLING_YET)
+  priceText         String?
+  excludedOutcomes  String[]
+  guarantee         String?
+  ctaRoute          String?
+
+  status               StrategyEntityStatus   @default(DRAFT)
+  approvalStatus       StrategyApprovalStatus @default(DRAFT)
+  currentVersionNumber Int                    @default(1)
+  createdById          String
+  archivedAt           DateTime?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  client     Client         @relation(fields: [clientId], references: [id])
+  versions   OfferVersion[]
+  proofItems ProofItem[]
+
+  @@index([clientId, status])
+}
+
+model OfferVersion {
+  id      String @id @default(cuid())
+  offerId String
+
+  name              String
+  forWhom           String?
+  problemAddressed  String?
+  corePromise       String?
+  intendedOutcome   String?
+  mechanism         String?
+  deliverables      String[]
+  pricePresentation OfferPricePresentation
+  priceText         String?
+  excludedOutcomes  String[]
+  guarantee         String?
+  ctaRoute          String?
+  status            StrategyEntityStatus
+  approvalStatus    StrategyApprovalStatus
+
+  versionNumber Int
+  changeType    ChangeType
+  changedById   String
+  changeNote    String?
+  createdAt     DateTime   @default(now())
+
+  offer Offer @relation(fields: [offerId], references: [id])
+
+  @@unique([offerId, versionNumber])
+}
+
+/**
+ * A single piece of proof (spec section 13). Lightweight and unversioned,
+ * like Objection/DecisionCriterion — additive facts about evidence, not an
+ * evolving strategic statement. Never auto-approved: incomplete items are
+ * stored as `needsReview` rather than fabricated.
+ */
+model ProofItem {
+  id       String  @id @default(cuid())
+  clientId String
+  offerId  String?
+
+  proofType           ProofType
+  whatHappened        String?
+  whoForWhom          String?
+  startingPoint       String?
+  whatChanged         String?
+  overPeriod          String?
+  contributingFactors String?
+  limitations         String[]
+  publicUseStatus     PublicUseStatus        @default(REQUIRES_APPROVAL)
+  evidenceStrength    EvidenceStrength       @default(WEAK)
+  needsReview         Boolean                @default(false)
+  approvalStatus      StrategyApprovalStatus @default(DRAFT)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id])
+  offer  Offer? @relation(fields: [offerId], references: [id])
+
+  @@index([clientId, approvalStatus])
+  @@index([offerId])
+}
+
+/**
+ * The parent record for one Reel's generations — the stable id used in /reels/[generationId].
+ */
+model ReelGeneration {
+  id       String @id @default(cuid())
+  clientId String
+  cohortId String
+
+  contextSnapshotId String
+  status            ReelGenerationStatus @default(DRAFT)
+
+  currentVersionNumber Int      @default(1)
+  createdById          String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  client   Client        @relation(fields: [clientId], references: [id])
+  versions ReelVersion[]
+
+  @@index([clientId, createdAt])
+  @@index([cohortId])
+}
+
+/**
+ * Each save/regenerate of a Reel creates a new version — the full ReelScriptPackage is never mutated in place.
+ */
+model ReelVersion {
+  id               String @id @default(cuid())
+  reelGenerationId String
+
+  packageJson       Json
+  selectedHookIndex Int      @default(0)
+  validationJson    Json
+  versionNumber     Int
+  changeNote        String?
+  createdById       String
+  createdAt         DateTime @default(now())
+
+  reelGeneration ReelGeneration @relation(fields: [reelGenerationId], references: [id])
+
+  @@unique([reelGenerationId, versionNumber])
 }

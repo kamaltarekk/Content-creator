@@ -33,7 +33,12 @@ export type Action =
   | "strategy.edit"
   | "strategy.approve"
   | "strategy.approve.conflict"
-  | "strategy.suggest";
+  | "strategy.suggest"
+  | "setup.view"
+  | "setup.edit"
+  | "setup.approve"
+  | "reel.generate"
+  | "reel.approve";
 
 const ALL_ACTIONS: Action[] = [
   "client.create",
@@ -54,6 +59,11 @@ const ALL_ACTIONS: Action[] = [
   "strategy.approve",
   "strategy.approve.conflict",
   "strategy.suggest",
+  "setup.view",
+  "setup.edit",
+  "setup.approve",
+  "reel.generate",
+  "reel.approve",
 ];
 
 /**
@@ -85,9 +95,24 @@ export const ROLE_ACTIONS: Record<OrgRole | ClientRole, Action[]> = {
     "strategy.approve",
     "strategy.approve.conflict",
     "strategy.suggest",
+    "setup.view",
+    "setup.edit",
+    "setup.approve",
+    "reel.generate",
+    "reel.approve",
   ],
-  EDITOR: ["brain.view", "brain.edit.draft", "review.approve", "source.download", "strategy.view", "strategy.edit"],
-  VIEWER: ["brain.view", "source.download", "strategy.view"],
+  EDITOR: [
+    "brain.view",
+    "brain.edit.draft",
+    "review.approve",
+    "source.download",
+    "strategy.view",
+    "strategy.edit",
+    "setup.view",
+    "setup.edit",
+    "reel.generate",
+  ],
+  VIEWER: ["brain.view", "source.download", "strategy.view", "setup.view"],
   CLIENT_APPROVER: [
     "brain.view",
     "review.approve",
@@ -96,6 +121,9 @@ export const ROLE_ACTIONS: Record<OrgRole | ClientRole, Action[]> = {
     "strategy.view",
     "strategy.approve",
     "strategy.approve.conflict",
+    "setup.view",
+    "setup.approve",
+    "reel.approve",
   ],
 };
 
