@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { Prisma } from "@prisma/client";
+
 import { prisma } from "@/server/db/prisma";
 import { READINESS_WEIGHTS, STRATEGY_FOLLOWUP_QUESTIONS, type ReadinessCategory } from "@/server/domain/strategy-schema";
 
@@ -56,16 +58,12 @@ export function computeStrategyReadiness(stats: ReadinessStats): StrategyReadine
   return { overall, categories, followUpQuestions };
 }
 
-/**
- * Aggregates live strategy data for a client into the stats the pure
- * calculator needs. Cohorts are the unit of analysis: a client with zero
- * cohorts scores 0 everywhere, since none of the reasoning chain exists yet.
- */
-export async function getStrategyReadinessForClient(clientId: string): Promise<StrategyReadinessResult> {
-  const cohorts = await prisma.cohort.findMany({
+async function loadCohortReadinessRows(clientId: string) {
+  return prisma.cohort.findMany({
     where: { clientId, status: { not: "ARCHIVED" } },
     select: {
       id: true,
+      name: true,
       definition: true,
       commercialContext: true,
       currentBelief: true,
@@ -81,6 +79,15 @@ export async function getStrategyReadinessForClient(clientId: string): Promise<S
       },
     },
   });
+}
+
+/**
+ * Aggregates live strategy data for a client into the stats the pure
+ * calculator needs. Cohorts are the unit of analysis: a client with zero
+ * cohorts scores 0 everywhere, since none of the reasoning chain exists yet.
+ */
+export async function getStrategyReadinessForClient(clientId: string): Promise<StrategyReadinessResult> {
+  const cohorts = await loadCohortReadinessRows(clientId);
 
   const total = cohorts.length;
   const count = (predicate: (c: (typeof cohorts)[number]) => boolean) => cohorts.filter(predicate).length;
@@ -100,4 +107,63 @@ export async function getStrategyReadinessForClient(clientId: string): Promise<S
   };
 
   return computeStrategyReadiness(stats);
+}
+
+export type PerCohortReadiness = {
+  cohortId: string;
+  cohortName: string;
+  missingCategories: ReadinessCategory[];
+};
+
+/** Per-cohort breakdown of which categories in the reasoning chain are still missing — the basis for specific follow-up questions. */
+export async function getPerCohortReadiness(clientId: string): Promise<PerCohortReadiness[]> {
+  const cohorts = await loadCohortReadinessRows(clientId);
+
+  return cohorts.map((c) => {
+    const missing: ReadinessCategory[] = [];
+    if (!(c.definition && c.commercialContext && c.currentBelief && c.desiredOutcome)) missing.push("cohortDefinition");
+    if (c.commercialSituations.length === 0) missing.push("commercialSituations");
+    if (!c.commercialSituations.some((s) => Boolean(s.triggerDescription))) missing.push("triggers");
+    if (c.buyingDecisions.length === 0) missing.push("buyingDecisions");
+    if (!c.buyingDecisions.some((d) => d.participants.length > 0)) missing.push("buyingCommittee");
+    if (!c.beliefMaps.some((b) => Boolean(b.betterBeliefStatement))) missing.push("beliefs");
+    if (!c.beliefMaps.some((b) => b.evidenceLinks.length > 0)) missing.push("evidenceCoverage");
+    if (!c.beliefMaps.some((b) => Boolean(b.betterCommercialDecision))) missing.push("betterDecisions");
+    return { cohortId: c.id, cohortName: c.name, missingCategories: missing };
+  });
+}
+
+/** Specific (not generic) follow-up questions: the category question, phrased against the actual cohort that's missing it. */
+export async function getSpecificFollowUpQuestions(clientId: string): Promise<{ cohortName: string; category: ReadinessCategory; question: string }[]> {
+  const perCohort = await getPerCohortReadiness(clientId);
+  return perCohort.flatMap((c) =>
+    c.missingCategories.map((category) => ({
+      cohortName: c.cohortName,
+      category,
+      question: `For "${c.cohortName}": ${STRATEGY_FOLLOWUP_QUESTIONS[category]}`,
+    })),
+  );
+}
+
+export async function createReadinessSnapshot(params: { clientId: string; generatedById?: string | null }) {
+  const readiness = await getStrategyReadinessForClient(params.clientId);
+  const specificQuestions = await getSpecificFollowUpQuestions(params.clientId);
+
+  return prisma.strategyReadinessSnapshot.create({
+    data: {
+      clientId: params.clientId,
+      overallScore: readiness.overall,
+      sectionScores: readiness.categories as unknown as Prisma.InputJsonValue,
+      followUpQuestions: specificQuestions.map((q) => q.question).slice(0, 30),
+      generatedById: params.generatedById ?? null,
+    },
+  });
+}
+
+export function listReadinessSnapshots(clientId: string) {
+  return prisma.strategyReadinessSnapshot.findMany({
+    where: { clientId },
+    orderBy: { generatedAt: "desc" },
+    take: 20,
+  });
 }
