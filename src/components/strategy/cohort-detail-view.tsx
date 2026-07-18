@@ -11,6 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CohortQualityPanel } from "@/components/strategy/cohort-quality-panel";
 import { EditCohortDialog } from "@/components/strategy/edit-cohort-dialog";
 import { AddCohortSourceDialog } from "@/components/strategy/add-cohort-source-dialog";
+import { AddSituationDialog } from "@/components/strategy/add-situation-dialog";
+import { AddDecisionDialog } from "@/components/strategy/add-decision-dialog";
+import Link from "next/link";
 
 const APPROVAL_VARIANT = {
   AI_SUGGESTED: "warning",
@@ -138,9 +141,14 @@ export function CohortDetailView({
         </TabsContent>
 
         <TabsContent value="situations" className="flex flex-col gap-3">
+          {canEdit && (
+            <div className="flex justify-end">
+              <AddSituationDialog clientId={clientId} cohortId={cohort.id} />
+            </div>
+          )}
           {cohort.commercialSituations.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              No commercial situations yet — add one from the Commercial Situation Mapper.
+              No commercial situations yet — what real-world trigger put this cohort in this position?
             </p>
           ) : (
             cohort.commercialSituations.map((situation) => (
@@ -158,15 +166,25 @@ export function CohortDetailView({
         </TabsContent>
 
         <TabsContent value="decisions" className="flex flex-col gap-3">
+          {canEdit && (
+            <div className="flex justify-end">
+              <AddDecisionDialog clientId={clientId} cohortId={cohort.id} navigateToDetail />
+            </div>
+          )}
           {cohort.buyingDecisions.length === 0 ? (
             <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              No buying decisions yet — map one from the Buying Decision Map.
+              No buying decisions yet — what exact decision does this cohort need to make?
             </p>
           ) : (
             cohort.buyingDecisions.map((decision) => (
               <div key={decision.id} className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
-                  <p className="font-medium text-foreground">{decision.title}</p>
+                  <Link
+                    href={`/c/${clientId}/strategy/decisions/${decision.id}`}
+                    className="font-medium text-foreground hover:text-lime hover:underline"
+                  >
+                    {decision.title}
+                  </Link>
                   <Badge variant="outline">{DECISION_TYPE_LABELS[decision.decisionType]}</Badge>
                 </div>
                 <Field label="Description" value={decision.description} />

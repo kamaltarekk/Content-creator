@@ -78,6 +78,25 @@ export type BuyingDecisionView = {
   criteria: DecisionCriterionView[];
 };
 
+export type BuyingDecisionListItemView = {
+  id: string;
+  title: string;
+  decisionType: DecisionType;
+  status: StrategyEntityStatus;
+  approvalStatus: StrategyApprovalStatus;
+  cohort: { id: string; name: string };
+  commercialSituationTitle: string | null;
+  participantCount: number;
+  objectionCount: number;
+  criterionCount: number;
+};
+
+/** Full Buying Decision detail view (the Buying Committee Mapper). */
+export type BuyingDecisionDetailView = BuyingDecisionView & {
+  cohort: { id: string; name: string };
+  commercialSituationTitle: string | null;
+};
+
 export type EvidenceLinkView = {
   id: string;
   description: string;
