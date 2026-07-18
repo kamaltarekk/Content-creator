@@ -106,6 +106,48 @@ Client 1─* StrategyReadinessSnapshot
 - **CohortPriority / EvidenceStrength / TriggerType / DecisionType / BuyingRole / BeliefType** — see `server/domain/strategy-schema.ts` for the full label maps.
 - **AuditAction** gained `MERGE`, `SPLIT`, `SUGGEST` (additive — Module 1's existing values are untouched).
 
+## Module 3 — Guided Client Setup + Script Intelligence Compiler + First Reel Generator
+
+Purely additive: 10 new models, all client-scoped. `Offer`/`ProofItem` are new, minimal precursor entities (not `ClientBrainFieldKey`s); everything else reuses existing Cohort/CommercialSituation/BeliefMap rows as sources rather than duplicating them. One field added to an existing model: `User.brainModePreference`.
+
+### Entity groups
+
+- **GuidedSetupSession** — one guided-setup run per client (`entryMode` FULL_GUIDED/FAST_IMPORT, `status` IN_PROGRESS/COMPLETED/ABANDONED, `currentSection`/`currentQuestionKey` for resume).
+- **GuidedSetupQuestionDefinition** — the question catalog, synced from code (`syncQuestionCatalog()`) into the database: `section`, `userFacingQuestion`/`helperText`/`example`, `answerType`, `options` (Json), `requiredLevel`, `scriptImpacts` (`ScriptImpact[]` — never empty unless `SYSTEM_ONLY`), `destinationEntity`/`destinationField`, `conditionalLogic` (Json — `{dependsOnKey, equals?, notEquals?}` or null), plain-language + expert labels, `displayOrder`.
+- **GuidedSetupAnswer** — one answer per `(sessionId, questionKey)`: `rawAnswer`/`normalizedValue`, `sourceType` (`GuidedAnswerSourceType`: EXISTING_CLIENT_BRAIN_ITEM/EXISTING_STRATEGY_ENTITY/AI_SUGGESTION/USER_INPUT/DEFAULT_VALUE), `sourceReference` (the id of whatever was reused, if anything), `approvalStatus`, reviewer + timestamp. The full traceability trail behind "where did this answer come from?".
+- **ScriptIntelligenceField** — a compiled, queryable projection for script-relevant facts with no existing normalized home (e.g. `content_objective`, `voice_technicality`, `voice_good_example`, `execution_duration`, `safety_avoid_topics`). `@@unique([clientId, fieldKey])`. Explicitly **a read-optimized index, not a duplicate store of truth** — everything that already has a home (voice tone, language, prohibited phrases) stays a `ClientBrainItem`.
+- **ScriptContextSnapshot** — an immutable, versioned save of one compiled `ScriptGenerationContext` (`compiledContext`/`sourceManifest`/`readiness` as Json, `warnings` list). A new compile always creates a fresh row; nothing is ever edited in place.
+- **Offer / OfferVersion** — a minimal, scoped precursor to a full future Offer + Proof + Claims module: `forWhom`/`problemAddressed`/`corePromise`/`intendedOutcome`/`mechanism`/`deliverables`/`pricePresentation` (`OfferPricePresentation`)/`priceText`/`excludedOutcomes`/`guarantee`/`ctaRoute`. Versioned exactly like `Cohort`/`BeliefMap`.
+- **ProofItem** — lightweight and unversioned (like `Objection`/`DecisionCriterion`): `proofType`, `whatHappened`/`whoForWhom`/`startingPoint`/`whatChanged`/`overPeriod`/`contributingFactors`, `limitations` list, `publicUseStatus` (`PublicUseStatus`: PUBLIC/PUBLIC_ANONYMOUS/INTERNAL_ONLY/REQUIRES_APPROVAL/PROHIBITED), `evidenceStrength` (reused from Module 2), `needsReview` (incomplete proof is flagged, never fabricated into something stronger than it is).
+- **ReelGeneration / ReelVersion** — the generated Reel, versioned like every other strategy entity: `ReelGeneration` carries `cohortId`, `contextSnapshotId`, denormalized `status` (`ReelGenerationStatus`: DRAFT/READY/ARCHIVED) + `currentVersionNumber`; `ReelVersion` is append-only, each row holding the full `packageJson` (`ReelScriptPackage`, Json), `selectedHookIndex` (denormalized for quick reads), and `validationJson` (the authoritative 8-gate `ReelValidationResult`, richer than the package's own embedded 6-key `audits` summary).
+
+### Key relationships
+
+```
+Client 1─* GuidedSetupSession 1─* GuidedSetupAnswer
+Client 1─* ScriptIntelligenceField
+Client 1─* ScriptContextSnapshot ──→ Cohort (optional)
+
+Client 1─* Offer 1─* OfferVersion
+              └─* ProofItem
+Client 1─* ProofItem (also directly, when not tied to an Offer)
+
+Client 1─* ReelGeneration ──→ Cohort, ScriptContextSnapshot (by id, not a relation)
+                          1─* ReelVersion
+```
+
+### Enums (highlights)
+
+- **ScriptImpact** — AUDIENCE, HOOK, ANGLE, STORY, BODY, EXAMPLE, PROOF, REFRAME, VOICE, CTA, FORMAT, VISUAL, SAFETY, LEARNING, SYSTEM_ONLY. Every Guided Setup question must declare at least one (or be `SYSTEM_ONLY`) — enforced by `validateQuestionScriptImpact()`.
+- **GuidedSetupEntryMode/Status/Section**, **GuidedAnswerType** (SHORT_TEXT/LONG_TEXT/SINGLE_SELECT/MULTI_SELECT/BOOLEAN/NUMBER/CURRENCY/DURATION/FILE/VOICE_INPUT_PLACEHOLDER/ENTITY_SELECT/AI_SUGGESTION_REVIEW), **GuidedRequiredLevel** (REQUIRED_FOR_ANY_REEL/REQUIRED_FOR_COMMERCIAL_REEL/RECOMMENDED/OPTIONAL/CONDITIONAL), **GuidedAnswerSourceType**.
+- **OfferPricePresentation**, **ProofType**, **PublicUseStatus**.
+- **ReelPlatform** (INSTAGRAM_REELS today), **ContentObjective** (AWARENESS/EDUCATION/BELIEF_CHANGE/TRUST/OBJECTION_HANDLING/OFFER_PROMOTION), **ReelFormat**, **PromotionalIntensity**, **RequestedStyle**, **ReelTechnicality**, **ProductionEditingLevel**, **HookType**, **ScriptSegmentType** (HOOK/LEAD/BODY/REHOOK/PAYOFF/CTA/VALUE_EXTENSION), **PortfolioRole** (VALUE/BRIDGE/COMMERCIAL_ASK), **CtaType**, **ReelClaimStatus** (APPROVED/RESTRICTED/POSITIONING_ONLY), **AuditGateStatus** (PASS/WARNING/FAIL), **ReelGenerationStatus**.
+- **BrainModePreference** (GUIDED/EXPERT) — a new field on `User`, not a new model.
+
+### `ScriptGenerationContext` and `ReelScriptPackage` — strict Zod, not database models
+
+These two shapes (`server/domain/script-generation-context.ts`, `server/domain/reel-script-package.ts`) are the actual contracts the AI layer is bound by — every nested object is `.strict()`, so an unexpected field fails validation rather than silently passing through. They're persisted as `Json` (`ScriptContextSnapshot.compiledContext`, `ReelVersion.packageJson`) but their real source of truth is the Zod schema, not the database column — the same relationship the `StrategySuggestionSchema` already has to `StrategySuggestion.proposedFields`.
+
 ## Notes on JSON columns
 
 JSON is used only where the structure is genuinely variable:
@@ -114,5 +156,7 @@ JSON is used only where the structure is genuinely variable:
 - `SourceProcessingJob.resultSummary`, `AuditLog.metadata` — free-form diagnostics.
 - `StrategySuggestion.proposedFields/sourceReferences/possibleConflicts/suggestedRelationships` — the AI's proposed fields, source references, and possible conflicts genuinely vary in shape by `suggestionType` (a cohort's fields aren't a belief's fields); each shape is still Zod-validated (`StrategySuggestionSchema`) before it's ever persisted.
 - `StrategyReadinessSnapshot.sectionScores` — a per-category breakdown snapshot; the live score is always recomputed from real rows, this is just a point-in-time save.
+- `GuidedSetupQuestionDefinition.options`/`conditionalLogic` — options genuinely vary by `answerType` (a SINGLE_SELECT's choices vs. a BOOLEAN's absence of any); conditional logic is a small fixed shape (`{dependsOnKey, equals?, notEquals?}`) that's simplest as one JSON field rather than three nullable columns.
+- `ScriptContextSnapshot.compiledContext`/`sourceManifest`/`readiness`, `ReelVersion.packageJson`/`validationJson` — the two strict Zod contracts (`ScriptGenerationContext`, `ReelScriptPackage`) plus their validation results; genuinely variable in the same sense proof/offer/audience facts vary per client and per Reel, and each is Zod-validated before it's ever persisted, same discipline as `StrategySuggestion`.
 
-The Client Brain itself is **not** a JSON blob — each field is a real, queryable row, which is what makes per-field conflict detection, versioning, and completeness scoring possible. The same discipline holds in Module 2: every cohort/situation/decision/belief field that's structurally fixed is a real column; `Json` only appears where the shape is inherently variable (the AI suggestion payload) or is an intentional point-in-time snapshot.
+The Client Brain itself is **not** a JSON blob — each field is a real, queryable row, which is what makes per-field conflict detection, versioning, and completeness scoring possible. The same discipline holds in Module 2 and Module 3: every cohort/situation/decision/belief/offer/proof field that's structurally fixed is a real column; `Json` only appears where the shape is inherently variable (the AI suggestion/generation payloads) or is an intentional point-in-time snapshot.
