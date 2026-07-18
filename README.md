@@ -95,6 +95,8 @@ Open http://localhost:3000 and sign in with a seeded account:
 | `strategist@demo-agency.test` | `password123` | STRATEGIST |
 | `approver@demo-agency.test` | `password123` | CLIENT_APPROVER (scoped to the demo client only) |
 
+Or create your own workspace at `/sign-up` — every sign-up creates a brand-new Organization with the signer as its OWNER (there's no shared-tenant join flow; adding teammates to that org or a client still happens via a direct `OrganizationMember`/`ClientMember` row until invitations are built).
+
 ---
 
 ## Environment variables
@@ -254,7 +256,8 @@ Coverage highlights — **Module 3**: Script Impact validation (every catalog en
 ## Known limitations
 
 - **AI is optional in this build**: without `OPENAI_API_KEY`, uploaded sources are parsed but not classified (they land in `NEEDS_ATTENTION`). The seeded demo ships pre-classified items so the full flow is explorable without a key.
-- **Auth**: uses Credentials + JWT sessions rather than the Auth.js Prisma *adapter* (the adapter's DB sessions are incompatible with the Credentials provider). Auth is still Prisma-backed at the data layer.
+- **Auth**: uses Credentials + JWT sessions rather than the Auth.js Prisma *adapter* (the adapter's DB sessions are incompatible with the Credentials provider). Auth is still Prisma-backed at the data layer. Google sign-in is available (only registered when `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` are set) but only links an email that already has a `User` row — it never provisions a new account itself.
+- **Sign-up creates a new Organization every time** — there's no self-serve joining of an existing org/team. Bringing a teammate into your org, or a `CLIENT_APPROVER` into one client, still happens via a direct `OrganizationMember`/`ClientMember` row until an invitation flow is built.
 - **Entity grouping**: cohorts/offers/beliefs/markets/proof are modeled as multiple field rows sharing a `groupId`; the review-approval flow creates one item per approved field, and richer grouping in the UI is a follow-up. The seed demonstrates grouped items directly.
 - **Multimodal**: image/audio/video/scanned-PDF are stored and flagged only — no OCR/ASR yet (a `ProcessingAdapter` seam is in place).
 - **Single organization per user** in v1; an org switcher is a future module.

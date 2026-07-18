@@ -17,9 +17,9 @@ export const authConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = Boolean(auth?.user);
-      const isSignInPage = nextUrl.pathname.startsWith("/sign-in");
+      const isPublicAuthPage = nextUrl.pathname.startsWith("/sign-in") || nextUrl.pathname.startsWith("/sign-up");
 
-      if (isSignInPage) {
+      if (isPublicAuthPage) {
         return isLoggedIn ? Response.redirect(new URL("/overview", nextUrl)) : true;
       }
 

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 import { signInAction, signInWithGoogleAction, type SignInState } from "@/server/actions/auth.actions";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,12 @@ export function SignInForm({ googleEnabled }: { googleEnabled: boolean }) {
         <Button type="submit" disabled={isPending} className="mt-2">
           {isPending ? "Signing in…" : "Sign in"}
         </Button>
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link href="/sign-up" className="text-foreground underline underline-offset-2">
+            Create one
+          </Link>
+        </p>
       </form>
     </div>
   );
