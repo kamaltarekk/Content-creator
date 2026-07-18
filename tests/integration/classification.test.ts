@@ -38,7 +38,7 @@ class FakeAIProvider implements AIProvider {
   }
 }
 
-const RUN_ID = `itg-${process.pid}-${Math.floor(Number(process.hrtime.bigint() % 1000000n))}`;
+const RUN_ID = `itg-${process.pid}-${process.hrtime()[1]}`;
 let orgId: string;
 let clientId: string;
 let sourceId: string;

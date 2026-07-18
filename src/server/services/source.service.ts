@@ -18,6 +18,33 @@ import {
 
 export class UploadValidationError extends Error {}
 
+/**
+ * Recomputes a source's status after review activity. Once every ImportReview
+ * tied to the source's extracted items has left PENDING, the source is
+ * COMPLETED; while any remain and the source was already processed, it stays
+ * READY_FOR_REVIEW. Never downgrades a FAILED/NEEDS_ATTENTION source.
+ */
+export async function recalculateSourceCompletion(sourceId: string): Promise<void> {
+  const source = await prisma.source.findUnique({
+    where: { id: sourceId },
+    select: { processingStatus: true },
+  });
+  if (!source) return;
+  if (source.processingStatus !== "READY_FOR_REVIEW" && source.processingStatus !== "COMPLETED") {
+    return;
+  }
+
+  const pending = await prisma.importReview.count({
+    where: { extractedItem: { sourceId }, status: "PENDING" },
+  });
+  const total = await prisma.importReview.count({ where: { extractedItem: { sourceId } } });
+
+  const nextStatus = total > 0 && pending === 0 ? "COMPLETED" : "READY_FOR_REVIEW";
+  if (nextStatus !== source.processingStatus) {
+    await prisma.source.update({ where: { id: sourceId }, data: { processingStatus: nextStatus } });
+  }
+}
+
 async function resolveUploaderNames(userIds: string[]) {
   const uniqueIds = Array.from(new Set(userIds));
   const users = await prisma.user.findMany({

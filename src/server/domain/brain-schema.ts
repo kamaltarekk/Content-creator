@@ -1,4 +1,4 @@
-import { ClientBrainFieldKey, ClientBrainSectionKey } from "@prisma/client";
+import type { ClientBrainFieldKey, ClientBrainSectionKey } from "@prisma/client";
 
 /**
  * The single source of truth for the Client Brain's structure: which fields
