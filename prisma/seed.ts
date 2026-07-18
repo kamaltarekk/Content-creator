@@ -84,6 +84,7 @@ async function main() {
     await prisma.importReview.deleteMany({ where: { clientId } });
 
     // --- Module 2: strategy layer (FK-safe order) ---
+    await prisma.strategyReadinessSnapshot.deleteMany({ where: { clientId } });
     await prisma.strategySuggestionReview.deleteMany({ where: { clientId } });
     await prisma.strategySuggestion.deleteMany({ where: { clientId } });
     await prisma.strategicRelationship.deleteMany({ where: { clientId } });
